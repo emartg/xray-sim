@@ -1,0 +1,64 @@
+# Ignore build directories
+build/
+cmake-build-*/
+
+# Visual Studio specific files
+*.VC.db
+*.VC.VC.opendb
+*.VC.db-wal
+*.VC.db-shm
+
+# Compiled object files, static and dynamic libraries
+*.obj
+*.o
+*.lib
+*.dll
+*.pdb
+*.exp
+*.exe
+*.idb
+*.ipdb
+*.iobj
+*.ildb
+*.tlog
+*.log
+
+# Temporary files
+*.tmp
+*.log
+*.vspscc
+*.vssscc
+*~
+*.ncb
+*.user
+*.suo
+*.sln.docstates
+*.opendb
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Makefile
+install_manifest.txt
+
+# Visual Studio workspace settings
+.vs/
+
+# Visual Studio Code specific files
+.vscode/
+
+# Other temporary and backup files
+*.bak
+*.swp
+*.swn
+*.swo
+
+# Hidden directories and files
+.DS_Store
+Thumbs.db
+.idea/
+*.class
+*.pyc
+__pycache__/
