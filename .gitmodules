@@ -1,6 +1,6 @@
 [submodule "Engine"]
 	path = Engine
 	url = https://github.com/emartg/opengl-graphics-engine.git
-[submodule "App"]
-	path = App
+[submodule "Sim"]
+	path = Sim
 	url = https://github.com/emartg/xray-sim-app.git
