@@ -1,0 +1,4 @@
+# Files excluded from clang-format (third-party code: the submodules keep the format of their own authors)
+
+engine/**
+gvirtual-xray/**
