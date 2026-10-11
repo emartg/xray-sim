@@ -1,8 +1,11 @@
-[submodule "Engine"]
-	path = Engine
+[submodule "engine"]
+	path = engine
 	url = https://github.com/emartg/opengl-graphics-engine.git
 	branch = main
-[submodule "Sim"]
-	path = Sim
-	url = https://github.com/emartg/xray-sim-app.git
+[submodule "gvirtual-xray"]
+	path = gvirtual-xray
+	url = https://github.com/emartg/gvirtual-xray.git
 	branch = main
+[submodule "gvirtual-xray"]
+	path = gvirtual-xray
+	url = https://github.com/emartg/gvirtual-xray.git
