@@ -26,3 +26,7 @@ If the repository was cloned without `--recurse-submodules`, run `git submodule 
 ## Status
 
 Early stage: the layout of the repository is set up, and the simulator itself is not written yet. The build files will be added in the next steps.
+
+## Assets and Credits
+
+The third-party libraries and resources of the simulator are credited, with their authors, sources, and licenses, in [docs/sources.md](docs/sources.md). The engine and the gVirtualXRay fork have their own files: [engine/docs/sources.md](engine/docs/sources.md) and [gvirtual-xray/doc/SOURCES.md](gvirtual-xray/doc/SOURCES.md).
