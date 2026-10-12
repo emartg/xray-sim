@@ -1,101 +1,222 @@
-﻿{
-    "version": 3,
-    "configurePresets": [
-        {
-            "name": "windows-base",
-            "hidden": true,
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
-            "installDir": "${sourceDir}/out/install/${presetName}",
-            "cacheVariables": {
-                "CMAKE_C_COMPILER": "cl.exe",
-                "CMAKE_CXX_COMPILER": "cl.exe"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            }
-        },
-        {
-            "name": "x64-debug",
-            "displayName": "x64 Debug",
-            "inherits": "windows-base",
-            "architecture": {
-                "value": "x64",
-                "strategy": "external"
-            },
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "x64-release",
-            "displayName": "x64 Release",
-            "inherits": "x64-debug",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
-            }
-        },
-        {
-            "name": "x86-debug",
-            "displayName": "x86 Debug",
-            "inherits": "windows-base",
-            "architecture": {
-                "value": "x86",
-                "strategy": "external"
-            },
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "x86-release",
-            "displayName": "x86 Release",
-            "inherits": "x86-debug",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
-            }
-        },
-        {
-            "name": "linux-debug",
-            "displayName": "Linux Debug",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
-            "installDir": "${sourceDir}/out/install/${presetName}",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
-            },
-            "vendor": {
-                "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
-                    "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
-                }
-            }
-        },
-        {
-            "name": "macos-debug",
-            "displayName": "macOS Debug",
-            "generator": "Ninja",
-            "binaryDir": "${sourceDir}/out/build/${presetName}",
-            "installDir": "${sourceDir}/out/install/${presetName}",
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            },
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Darwin"
-            },
-            "vendor": {
-                "microsoft.com/VisualStudioRemoteSettings/CMake/1.0": {
-                    "sourceDir": "$env{HOME}/.vs/$ms{projectDirName}"
-                }
-            }
-        }
-    ]
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "windows-only",
+      "description": "Configure only on Windows",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "vcpkg",
+      "description": "Resolve the dependencies of vcpkg.json with vcpkg (requires the VCPKG_ROOT environment variable)",
+      "hidden": true,
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name": "linux-only",
+      "description": "Configure only on Linux",
+      "hidden": true,
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "ninja-msvc-debug",
+      "displayName": "Ninja MSVC x64 + vcpkg Debug",
+      "inherits": ["windows-only", "vcpkg"],
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-msvc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "ninja-msvc-release",
+      "displayName": "Ninja MSVC x64 + vcpkg Release",
+      "inherits": "ninja-msvc-debug",
+      "binaryDir": "${sourceDir}/out/build/ninja-msvc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "vs2022-msvc-debug",
+      "displayName": "Visual Studio 2022 MSVC x64 + vcpkg Debug",
+      "inherits": ["windows-only", "vcpkg"],
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/vs2022-msvc-debug",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "vs2022-msvc-release",
+      "displayName": "Visual Studio 2022 MSVC x64 + vcpkg Release",
+      "inherits": "vs2022-msvc-debug",
+      "binaryDir": "${sourceDir}/out/build/vs2022-msvc-release"
+    },
+    {
+      "name": "vs2026-msvc-debug",
+      "displayName": "Visual Studio 2026 MSVC x64 + vcpkg Debug",
+      "inherits": ["windows-only", "vcpkg"],
+      "generator": "Visual Studio 18 2026",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/vs2026-msvc-debug",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      }
+    },
+    {
+      "name": "vs2026-msvc-release",
+      "displayName": "Visual Studio 2026 MSVC x64 + vcpkg Release",
+      "inherits": "vs2026-msvc-debug",
+      "binaryDir": "${sourceDir}/out/build/vs2026-msvc-release"
+    },
+    {
+      "name": "mingw-gcc-vcpkg-debug",
+      "displayName": "MinGW Makefiles GCC + vcpkg Debug (UCRT)",
+      "inherits": ["windows-only", "vcpkg"],
+      "generator": "MinGW Makefiles",
+      "binaryDir": "${sourceDir}/out/build/mingw-gcc-vcpkg-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+      }
+    },
+    {
+      "name": "mingw-gcc-vcpkg-release",
+      "displayName": "MinGW Makefiles GCC + vcpkg Release (UCRT)",
+      "inherits": "mingw-gcc-vcpkg-debug",
+      "binaryDir": "${sourceDir}/out/build/mingw-gcc-vcpkg-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ninja-gcc-debug",
+      "displayName": "Ninja GCC x64 Debug (Linux)",
+      "inherits": "linux-only",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-gcc-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "ninja-gcc-release",
+      "displayName": "Ninja GCC x64 Release (Linux)",
+      "inherits": "ninja-gcc-debug",
+      "binaryDir": "${sourceDir}/out/build/ninja-gcc-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "ninja-clang-debug",
+      "displayName": "Ninja Clang x64 Debug (Linux)",
+      "inherits": "linux-only",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/ninja-clang-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "ninja-clang-release",
+      "displayName": "Ninja Clang x64 Release (Linux)",
+      "inherits": "ninja-clang-debug",
+      "binaryDir": "${sourceDir}/out/build/ninja-clang-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "ninja-msvc-debug",
+      "configurePreset": "ninja-msvc-debug",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "ninja-msvc-release",
+      "configurePreset": "ninja-msvc-release",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "vs2022-msvc-debug",
+      "configurePreset": "vs2022-msvc-debug",
+      "configuration": "Debug",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "vs2022-msvc-release",
+      "configurePreset": "vs2022-msvc-release",
+      "configuration": "Release",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "vs2026-msvc-debug",
+      "configurePreset": "vs2026-msvc-debug",
+      "configuration": "Debug",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "vs2026-msvc-release",
+      "configurePreset": "vs2026-msvc-release",
+      "configuration": "Release",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "mingw-gcc-vcpkg-debug",
+      "configurePreset": "mingw-gcc-vcpkg-debug",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "mingw-gcc-vcpkg-release",
+      "configurePreset": "mingw-gcc-vcpkg-release",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "ninja-gcc-debug",
+      "configurePreset": "ninja-gcc-debug",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "ninja-gcc-release",
+      "configurePreset": "ninja-gcc-release",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "ninja-clang-debug",
+      "configurePreset": "ninja-clang-debug",
+      "targets": ["XRSim"]
+    },
+    {
+      "name": "ninja-clang-release",
+      "configurePreset": "ninja-clang-release",
+      "targets": ["XRSim"]
+    }
+  ]
 }

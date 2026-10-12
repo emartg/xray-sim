@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "xray-sim",
+  "builtin-baseline": "434307da09bc05b2c86996dccc8b2351fc0d5d37",
+  "dependencies": [
+    "assimp",
+    "glfw3",
+    "glm"
+  ]
+}
