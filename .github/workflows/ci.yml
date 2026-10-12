@@ -1,0 +1,173 @@
+# Continuous integration of the simulator: builds XRSim on Linux (GCC and Clang, with the system packages)
+# and Windows (MSVC and MinGW's GCC, with vcpkg), runs its tests on Linux with a virtual display and Mesa's
+# software OpenGL 4.5 renderer (and the tests that need no display on Windows), and checks the code formatting.
+# Only the engine submodule is needed for now; the gVirtualXRay submodule is not built yet
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel the previous runs of the same branch or pull request when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Code formatting with the same clang-format version used to format the repository.
+  # git ls-files does not list the files of the submodules, which keep the format of their own authors
+  format:
+    name: Format (clang-format 23)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Install clang-format
+        run: pipx install clang-format==23.1.1
+
+      - name: Check the formatting
+        run: |
+          git ls-files '*.c' '*.cpp' '*.h' '*.hpp'             | xargs -r clang-format --style=file --dry-run --Werror
+
+  # Linux builds with the system packages, and tests of XRSim under a virtual display
+  linux:
+    name: Linux (${{ matrix.preset }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [ninja-gcc-debug, ninja-clang-release]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Check out the engine submodule
+        run: git submodule update --init --depth 1 -- engine
+
+      - name: Install the dependencies
+        # retries and a network timeout, so that an unresponsive package mirror does not stall the job
+        run: |
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends             ninja-build libglfw3-dev libassimp-dev libglm-dev libgl-dev             xvfb libgl1-mesa-dri mesa-utils
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Show the OpenGL renderer of the virtual display
+        run: xvfb-run -a glxinfo -B
+
+      - name: Run the tests
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure
+
+  # Windows builds with MSVC and MinGW's GCC, with the dependencies built by vcpkg (manifest mode, see
+  # vcpkg.json), and the tests that need no display (the smoke test does not run: the runners have no
+  # OpenGL 4.5 support). The vcpkg packages are stored in a binary cache, so they are only built from
+  # source when the manifest or the compiler changes
+  windows:
+    name: Windows (${{ matrix.preset }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - preset: ninja-msvc-debug
+            toolchain: msvc
+            triplet: x64-windows
+            generator: Ninja
+            build-type: Debug
+            c-compiler: cl
+            cxx-compiler: cl
+          - preset: mingw-gcc-vcpkg-release
+            toolchain: mingw
+            triplet: x64-mingw-dynamic
+            generator: MinGW Makefiles
+            build-type: Release
+            c-compiler: gcc
+            cxx-compiler: g++
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Check out the engine submodule
+        run: git submodule update --init --depth 1 -- engine
+
+      - name: Set up the MSVC developer environment
+        if: matrix.toolchain == 'msvc'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up the MinGW toolchain
+        if: matrix.toolchain == 'mingw'
+        shell: pwsh
+        run: |
+          # use the MinGW-w64 installation of the runner image (if present) before any other GCC in the PATH
+          if (Test-Path "C:\mingw64\bin\gcc.exe") {
+            "C:\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+            $env:Path = "C:\mingw64\bin;$env:Path"
+          }
+          # vcpkg's MinGW toolchain requires the target-prefixed compiler (x86_64-w64-mingw32-gcc)
+          Get-Command gcc, g++, x86_64-w64-mingw32-gcc, mingw32-make | Format-Table Name, Source -AutoSize
+          gcc --version
+
+      - name: Identify the compiler version
+        # part of the key of the vcpkg binary cache, so that packages built by another compiler version are not reused
+        id: compiler
+        shell: pwsh
+        run: |
+          if ("${{ matrix.toolchain }}" -eq "msvc") { $version = "msvc-$env:VCToolsVersion" } else { $version = "gcc-$(gcc -dumpfullversion)" }
+          Write-Output "Compiler: $version"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Set up vcpkg at the baseline of the manifest
+        # after the MSVC developer environment, which may set VCPKG_ROOT to the vcpkg instance of Visual Studio
+        shell: pwsh
+        run: |
+          $baseline = (Get-Content vcpkg.json -Raw | ConvertFrom-Json).'builtin-baseline'
+          $vcpkgRoot = Join-Path $env:RUNNER_TEMP "vcpkg"
+          git init --quiet $vcpkgRoot
+          git -C $vcpkgRoot fetch --quiet --depth 1 https://github.com/microsoft/vcpkg.git $baseline
+          git -C $vcpkgRoot checkout --quiet FETCH_HEAD
+          & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "VCPKG_BINARY_SOURCES=clear;files,$env:RUNNER_TEMP\vcpkg-binary-cache,readwrite" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Restore the vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ${{ runner.temp }}\vcpkg-binary-cache
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-
+
+      - name: Configure
+        # vcpkg installs the dependencies of the manifest during the configuration (from the cache when available)
+        run: cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON
+
+      - name: Save the vcpkg binary cache
+        # saved even if a later step fails, so that the dependencies are not built again on the next run
+        if: ${{ !cancelled() && steps.vcpkg-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v5
+        with:
+          path: ${{ runner.temp }}\vcpkg-binary-cache
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json') }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel
+
+      - name: Run the tests that need no display
+        run: ctest --test-dir out/build/${{ matrix.preset }} -R XRSim_Invalid_Argument_Test --output-on-failure
