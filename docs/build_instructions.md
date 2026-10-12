@@ -78,3 +78,11 @@ The code of `src/` is formatted with clang-format 23.1.1, using the `.clang-form
 ```
 git ls-files '*.c' '*.cpp' '*.h' '*.hpp' | xargs clang-format --style=file --dry-run --Werror
 ```
+
+## Continuous Integration
+
+The workflow `.github/workflows/ci.yml` runs on every push to `main` and on every pull request:
+
+- **Format:** the clang-format check above.
+- **Linux:** the `ninja-gcc-debug` and `ninja-clang-release` presets, with the system packages; it builds and runs the tests under a virtual display (Xvfb) with Mesa's software OpenGL 4.5 renderer.
+- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache); it builds and runs only the test that needs no display, since the runners do not support OpenGL 4.5.
