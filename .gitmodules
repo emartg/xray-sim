@@ -6,6 +6,3 @@
 	path = gvirtual-xray
 	url = https://github.com/emartg/gvirtual-xray.git
 	branch = main
-[submodule "gvirtual-xray"]
-	path = gvirtual-xray
-	url = https://github.com/emartg/gvirtual-xray.git
