@@ -19,9 +19,8 @@ engine_stage_runtime_dependencies(XRSim)
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${HEADERS} ${SOURCES})
 
 # Smoke test: create a window, render a few frames, and exit.
-# It fails if the executable exits with an error code or prints an error message (the pattern is written as
-# a character class because the escape sequence \[ is lost when CMake stores the property, which leaves an
-# invalid pattern that ctest ignores).
+# It fails if the executable exits with an error code or prints an error message (the pattern is a character
+# class, so that it needs no escape sequence).
 # It needs an OpenGL 4.5 display (e.g., xvfb-run with Mesa on Linux)
 if(XRSIM_BUILD_TESTS)
 	add_test(NAME XRSim_Smoke_Test COMMAND XRSim --frames 60)
