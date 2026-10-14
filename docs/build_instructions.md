@@ -4,8 +4,10 @@ This document explains how to build and run the simulator (`XRSim`). The simulat
 subdirectory, so the details of the prerequisites, the dependencies of the engine, and the troubleshooting of
 the platforms are in the [engine's build instructions](../engine/docs/build_instructions.md); this document
 only covers what is specific to this repository. The simulator also builds the core library of the
-gVirtualXRay fork (the X-ray part, option `XRSIM_BUILD_XRAY`), which is on by default on Linux and off on Windows
-for now, because the way of providing its dependencies on Windows is not decided yet.
+gVirtualXRay fork (the X-ray part, option `XRSIM_BUILD_XRAY`, on by default except with MSVC). On Linux its
+dependencies are the system packages, and on Windows they are built by vcpkg, like the engine's. With MSVC the
+option is off by default until the fork fixes the way it forces the inclusion of a header (it breaks its own library
+with MSVC); pass `-DXRSIM_BUILD_XRAY=ON` to try it anyway (MinGW on Windows is supported).
 
 ## Prerequisites
 
@@ -28,9 +30,9 @@ CMake stops with a message if the engine, or gVirtualXRay when the X-ray part is
 
 ## Dependencies
 
-The dependencies are the ones of the engine, declared in the `vcpkg.json` manifest of this repository (vcpkg manifest mode), plus the ones of gVirtualXRay on Linux:
+The dependencies are the ones of the engine, declared in the `vcpkg.json` manifest of this repository (vcpkg manifest mode), plus the ones of gVirtualXRay:
 
-- **Windows (every preset):** vcpkg builds and installs them into the build directory during the first configuration. The first one takes a long time, and vcpkg stores the built packages in its binary cache for the next ones.
+- **Windows (every preset):** vcpkg builds and installs them into the build directory during the first configuration, for the triplet of the preset (`x64-windows-xray` with MSVC and `x64-mingw-dynamic-xray` with MinGW). These triplets are in `cmake/vcpkg_triplets` and are the ones of vcpkg (`x64-windows` and `x64-mingw-dynamic`) with GLEW as a static library, which gVirtualXRay requires. The first configuration takes a long time, and vcpkg stores the built packages in its binary cache for the next ones.
 - **Linux:** the system packages. On Ubuntu:
 
 ```
@@ -38,7 +40,7 @@ sudo apt-get install ninja-build libglfw3-dev libassimp-dev libglm-dev libgl-dev
   libglu1-mesa-dev libegl-dev libglew-dev libtiff-dev libfreetype-dev zlib1g-dev libboost-dev libpng-dev libbz2-dev
 ```
 
-gVirtualXRay is built with these system packages and with its own copy of xraylib. A missing package is not an error: gVirtualXRay would build that dependency from sources instead (and download it), so check that no line of the configuration log starts with `-- Build` followed by the name of a library. Pass `-DXRSIM_BUILD_XRAY=OFF` to build only the engine and the application (it is the default on Windows).
+gVirtualXRay is built with these system packages and with its own copy of xraylib. A missing package is not an error: gVirtualXRay would build that dependency from sources instead (and download it), so check that no line of the configuration log starts with `-- Build` followed by the name of a library. Pass `-DXRSIM_BUILD_XRAY=OFF` to build only the engine and the application.
 
 The dependencies of the engine can change when the pinned version of the engine changes (the manifest and the package list above are kept in sync with the pinned version).
 
@@ -90,4 +92,4 @@ The workflow `.github/workflows/ci.yml` runs on every push to `main` and on ever
 
 - **Format:** the clang-format check above.
 - **Linux:** the `ninja-gcc-debug` and `ninja-clang-release` presets, with the system packages; it builds and runs the tests under a virtual display (Xvfb) with Mesa's software OpenGL 4.5 renderer.
-- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache); it builds and runs only the test that needs no display, since the runners do not support OpenGL 4.5.
+- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache); it builds and runs only the tests that need no display (the invalid argument test, and the adapter test where the X-ray part is built, which is not the case with MSVC for now), since the runners do not support OpenGL 4.5.
