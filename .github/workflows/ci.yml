@@ -1,7 +1,8 @@
 # Continuous integration of the simulator: builds XRSim on Linux (GCC and Clang, with the system packages)
 # and Windows (MSVC and MinGW's GCC, with vcpkg), runs its tests on Linux with a virtual display and Mesa's
 # software OpenGL 4.5 renderer (and the tests that need no display on Windows), and checks the code formatting.
-# Only the engine submodule is needed for now; the gVirtualXRay submodule is not built yet
+# The Linux jobs also build gVirtualXRay (with the system packages, and without its Git LFS files, which the
+# build does not need); the Windows jobs build only the engine for now
 
 name: CI
 
@@ -50,17 +51,30 @@ jobs:
       - name: Check out the repository
         uses: actions/checkout@v7
 
-      - name: Check out the engine submodule
-        run: git submodule update --init --depth 1 -- engine
+      - name: Check out the engine and gVirtualXRay submodules
+        # the Git LFS files of gVirtualXRay (data and assets) are not needed, and GitHub charges their bandwidth
+        env:
+          GIT_LFS_SKIP_SMUDGE: 1
+        run: git submodule update --init --depth 1 -- engine gvirtual-xray
 
       - name: Install the dependencies
         # retries and a network timeout, so that an unresponsive package mirror does not stall the job
         run: |
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends             ninja-build libglfw3-dev libassimp-dev libglm-dev libgl-dev             xvfb libgl1-mesa-dri mesa-utils
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y --no-install-recommends \
+            ninja-build libglfw3-dev libassimp-dev libglm-dev libgl-dev \
+            libglu1-mesa-dev libegl-dev libglew-dev libtiff-dev libfreetype-dev zlib1g-dev libboost-dev \
+            libpng-dev libbz2-dev xvfb libgl1-mesa-dri mesa-utils
 
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON
+        # a dependency of gVirtualXRay that CMake does not find is built from source instead, so the log is checked
+        # to make sure that every dependency comes from the system
+        run: |
+          cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON 2>&1 | tee configure.log
+          if grep -E "^-- Build (Zlib|ASSIMP|GLEW|LibTIFF|Freetype)" configure.log; then
+            echo "::error::A dependency was not found in the system and would be built from source"
+            exit 1
+          fi
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}

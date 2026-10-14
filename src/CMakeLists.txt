@@ -1,10 +1,10 @@
 ## CMakeLists.txt for the simulator application (XRSim)
 
-# Collect header and source files
-set(HEADERS_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+# Collect header and source files of the application (the libraries have their own directories)
+set(HEADERS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/app)
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ${HEADERS_DIR}/*.h*)
 
-set(SOURCES_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set(SOURCES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/app)
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${SOURCES_DIR}/*.cpp)
 
 # Create the executable (headers and sources are listed so the IDEs display them), linked only against
@@ -17,6 +17,11 @@ engine_stage_runtime_dependencies(XRSim)
 
 # Organize files into source groups for Visual Studio
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${HEADERS} ${SOURCES})
+
+# The library that adapts gVirtualXRay to the simulator
+if(XRSIM_BUILD_XRAY)
+	add_subdirectory(xray)
+endif()
 
 # Smoke test: create a window, render a few frames, and exit.
 # It fails if the executable exits with an error code or prints an error message (the pattern is a character

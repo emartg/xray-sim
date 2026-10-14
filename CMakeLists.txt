@@ -1,9 +1,11 @@
 ## Top-level CMakeLists.txt for the X-ray simulator.
-## It builds the simulator application (XRSim) on top of the Engine, which is a Git submodule
-## consumed through the add_subdirectory() command (only its Core and Platform libraries are built)
+## It builds the simulator application (XRSim) on top of the Engine and gVirtualXRay, which are Git submodules
+## consumed through the add_subdirectory() command (only the Core and Platform libraries of the Engine, and the
+## core library of gVirtualXRay, are built)
 
-cmake_minimum_required(VERSION 3.21)
-cmake_policy(VERSION 3.21)
+# The minimum version of CMake is the one required by gVirtualXRay
+cmake_minimum_required(VERSION 3.26)
+cmake_policy(VERSION 3.26)
 
 # Project name and languages
 project(XRaySimProject LANGUAGES C CXX)
@@ -15,6 +17,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Options
 option(XRSIM_BUILD_TESTS "Build the simulator tests" OFF)
+
+# The X-ray part (gVirtualXRay and the library that adapts it) is built by default only on Linux for now: the
+# way of providing the dependencies of gVirtualXRay on Windows is not decided yet
+if(UNIX AND NOT APPLE)
+	set(XRSIM_BUILD_XRAY_DEFAULT ON)
+else()
+	set(XRSIM_BUILD_XRAY_DEFAULT OFF)
+endif()
+option(XRSIM_BUILD_XRAY "Build the X-ray part of the simulator (gVirtualXRay and its adapter)" ${XRSIM_BUILD_XRAY_DEFAULT})
 
 # Set default build type to Debug if not specified (single-configuration generators only, like Makefile or Ninja)
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
@@ -45,5 +56,44 @@ if(TARGET App)
 	message(FATAL_ERROR "The Engine's sample App must not be built for the simulator (ENGINE_BUILD_APP must be OFF)")
 endif()
 
+# Add the core library of gVirtualXRay, which provides the target gVirtualXRay::gVirtualXRay
+if(XRSIM_BUILD_XRAY)
+	if(NOT EXISTS "${PROJECT_SOURCE_DIR}/gvirtual-xray/CMakeLists.txt")
+		message(FATAL_ERROR "gVirtualXRay was not found in ${PROJECT_SOURCE_DIR}/gvirtual-xray.\n"
+			"Fetch the Git submodules with: git submodule update --init gvirtual-xray")
+	endif()
+
+	# Build the core library alone, without a GLFW of its own: the Engine provides the window and the OpenGL context,
+	# and GLEW (never GLAD, which would duplicate the symbols of the Engine's loader) is initialized after the Engine's
+	set(BUILD_SIMPLEGVXR OFF)
+	set(BUILD_WRAPPERS OFF)
+	set(USE_GLFW OFF)
+	set(USE_GLEW ON)
+
+	# Use the system packages of the dependencies (on Linux), instead of building them from sources
+	set(USE_SYSTEM_GLEW ON)
+	set(USE_SYSTEM_ASSIMP ON)
+	set(USE_SYSTEM_ZLIB ON)
+	set(USE_SYSTEM_LIBTIFF ON)
+	set(USE_SYSTEM_FREETYPE ON)
+	set(USE_SYSTEM_BOOST ON)
+
+	# The simulator does not use Vulkan, and gVirtualXRay only supports it together with its own GLFW, which is turned off
+	# (the library would otherwise fail to compile on a machine with the Vulkan loader installed)
+	set(CMAKE_DISABLE_FIND_PACKAGE_Vulkan ON)
+
+	add_subdirectory(gvirtual-xray)
+
+	# The tests and SimpleGVXR of gVirtualXRay must not be built for the simulator
+	if(TARGET SimpleGVXR OR TARGET TestMixture)
+		message(FATAL_ERROR "SimpleGVXR and the tests of gVirtualXRay must not be built for the simulator")
+	endif()
+endif()
+
 # Add the simulator application
 add_subdirectory(src)
+
+# Add the tests of the libraries of the simulator
+if(XRSIM_BUILD_TESTS AND XRSIM_BUILD_XRAY)
+	add_subdirectory(tests)
+endif()
