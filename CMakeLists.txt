@@ -18,12 +18,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Options
 option(XRSIM_BUILD_TESTS "Build the simulator tests" OFF)
 
-# The X-ray part (gVirtualXRay and the library that adapts it) is built by default only on Linux for now: the
-# way of providing the dependencies of gVirtualXRay on Windows is not decided yet
-if(UNIX AND NOT APPLE)
-	set(XRSIM_BUILD_XRAY_DEFAULT ON)
-else()
+# The X-ray part (gVirtualXRay and the library that adapts it). It is off by default with MSVC: the pinned version of
+# gVirtualXRay passes an option to every Windows compiler that MSVC does not know, and then compiles a header as a source
+# file, which leaves its library without some of its code
+if(MSVC)
 	set(XRSIM_BUILD_XRAY_DEFAULT OFF)
+else()
+	set(XRSIM_BUILD_XRAY_DEFAULT ON)
 endif()
 option(XRSIM_BUILD_XRAY "Build the X-ray part of the simulator (gVirtualXRay and its adapter)" ${XRSIM_BUILD_XRAY_DEFAULT})
 
@@ -70,7 +71,7 @@ if(XRSIM_BUILD_XRAY)
 	set(USE_GLFW OFF)
 	set(USE_GLEW ON)
 
-	# Use the system packages of the dependencies (on Linux), instead of building them from sources
+	# Use the packages of the dependencies (the system packages on Linux, vcpkg on Windows), instead of building them from sources
 	set(USE_SYSTEM_GLEW ON)
 	set(USE_SYSTEM_ASSIMP ON)
 	set(USE_SYSTEM_ZLIB ON)
