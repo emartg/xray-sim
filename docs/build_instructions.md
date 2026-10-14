@@ -3,38 +3,42 @@
 This document explains how to build and run the simulator (`XRSim`). The simulator builds the engine as a
 subdirectory, so the details of the prerequisites, the dependencies of the engine, and the troubleshooting of
 the platforms are in the [engine's build instructions](../engine/docs/build_instructions.md); this document
-only covers what is specific to this repository. For now, only the engine is built: the gVirtualXRay
-submodule is not part of the build yet.
+only covers what is specific to this repository. The simulator also builds the core library of the
+gVirtualXRay fork (the X-ray part, option `XRSIM_BUILD_XRAY`), which is on by default on Linux and off on Windows
+for now, because the way of providing its dependencies on Windows is not decided yet.
 
 ## Prerequisites
 
 - **Operating System:** Windows or Linux. macOS is not supported, since it only provides OpenGL up to 4.1.
 - **GPU and drivers:** OpenGL 4.5 core profile support (a recent Mesa on Linux is enough, including the `llvmpipe` software renderer).
 - **Compiler:** MSVC from Visual Studio 2022/2026, or GCC from a MinGW installation on Windows; GCC or Clang on Linux.
-- **CMake:** 3.25 or newer, to use the presets in `CMakePresets.json`.
+- **CMake:** 3.26 or newer (the minimum of gVirtualXRay), which also covers the presets in `CMakePresets.json`.
 - **vcpkg (Windows):** a Git clone of [vcpkg](https://github.com/microsoft/vcpkg), with the `VCPKG_ROOT` environment variable pointing to it.
-- **Git:** to clone the repository and its submodules.
+- **Git and Git LFS:** to clone the repository and its submodules (the configuration of gVirtualXRay checks that Git LFS is installed).
 
 ## Getting the Sources
 
-The engine is a Git submodule, so clone the repository with its submodules (see the [README](../README.md)), or fetch them afterwards:
+The engine and gVirtualXRay are Git submodules, so clone the repository with its submodules (see the [README](../README.md)), or fetch them afterwards:
 
 ```
-git submodule update --init engine
+git submodule update --init engine gvirtual-xray
 ```
 
-CMake stops with a message if the engine is missing.
+CMake stops with a message if the engine, or gVirtualXRay when the X-ray part is on, is missing. The build does not need the Git LFS files of gVirtualXRay (data and assets): set the environment variable `GIT_LFS_SKIP_SMUDGE=1` before fetching the submodule to skip them.
 
 ## Dependencies
 
-The dependencies are the ones of the engine, declared in the `vcpkg.json` manifest of this repository (vcpkg manifest mode):
+The dependencies are the ones of the engine, declared in the `vcpkg.json` manifest of this repository (vcpkg manifest mode), plus the ones of gVirtualXRay on Linux:
 
 - **Windows (every preset):** vcpkg builds and installs them into the build directory during the first configuration. The first one takes a long time, and vcpkg stores the built packages in its binary cache for the next ones.
 - **Linux:** the system packages. On Ubuntu:
 
 ```
-sudo apt-get install ninja-build libglfw3-dev libassimp-dev libglm-dev libgl-dev
+sudo apt-get install ninja-build libglfw3-dev libassimp-dev libglm-dev libgl-dev \
+  libglu1-mesa-dev libegl-dev libglew-dev libtiff-dev libfreetype-dev zlib1g-dev libboost-dev libpng-dev libbz2-dev
 ```
+
+gVirtualXRay is built with these system packages and with its own copy of xraylib. A missing package is not an error: gVirtualXRay would build that dependency from sources instead (and download it), so check that no line of the configuration log starts with `-- Build` followed by the name of a library. Pass `-DXRSIM_BUILD_XRAY=OFF` to build only the engine and the application (it is the default on Windows).
 
 The dependencies of the engine can change when the pinned version of the engine changes (the manifest and the package list above are kept in sync with the pinned version).
 
@@ -56,14 +60,15 @@ cmake --build --preset ninja-gcc-debug
 ./out/build/ninja-gcc-debug/bin/XRSim
 ```
 
-`XRSim --frames N` renders `N` frames and exits (it is used by the automated tests). The executable is at `bin/` in the build directory (`bin/Debug/` or `bin/Release/` with the Visual Studio generators).
+The build presets build every target (the application, the libraries, and the tests when they are on). `XRSim --frames N` renders `N` frames and exits (it is used by the automated tests). The executable is at `bin/` in the build directory (`bin/Debug/` or `bin/Release/` with the Visual Studio generators).
 
 ## Tests
 
-The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). Both are labelled `smoke`:
+The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). The first two are labelled `smoke`:
 
 - `XRSim_Smoke_Test` renders 60 frames, and fails if the exit code is not zero or if a line contains `[ERROR`. It needs an OpenGL 4.5 display (on Linux without one, run it with `xvfb-run -a`, which needs the `xvfb` and `libgl1-mesa-dri` packages).
 - `XRSim_Invalid_Argument_Test` checks that an invalid argument is rejected. It needs no display.
+- `Gvxr_Adapter_Test` (label `unit`, only with the X-ray part) checks that the simulator can use gVirtualXRay: the version is reported and the library creates a mixture of chemical elements, without an OpenGL context.
 
 ```
 cmake --preset ninja-gcc-debug -DXRSIM_BUILD_TESTS=ON

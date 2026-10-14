@@ -156,67 +156,55 @@
   "buildPresets": [
     {
       "name": "ninja-msvc-debug",
-      "configurePreset": "ninja-msvc-debug",
-      "targets": ["XRSim"]
+      "configurePreset": "ninja-msvc-debug"
     },
     {
       "name": "ninja-msvc-release",
-      "configurePreset": "ninja-msvc-release",
-      "targets": ["XRSim"]
+      "configurePreset": "ninja-msvc-release"
     },
     {
       "name": "vs2022-msvc-debug",
       "configurePreset": "vs2022-msvc-debug",
-      "configuration": "Debug",
-      "targets": ["XRSim"]
+      "configuration": "Debug"
     },
     {
       "name": "vs2022-msvc-release",
       "configurePreset": "vs2022-msvc-release",
-      "configuration": "Release",
-      "targets": ["XRSim"]
+      "configuration": "Release"
     },
     {
       "name": "vs2026-msvc-debug",
       "configurePreset": "vs2026-msvc-debug",
-      "configuration": "Debug",
-      "targets": ["XRSim"]
+      "configuration": "Debug"
     },
     {
       "name": "vs2026-msvc-release",
       "configurePreset": "vs2026-msvc-release",
-      "configuration": "Release",
-      "targets": ["XRSim"]
+      "configuration": "Release"
     },
     {
       "name": "mingw-gcc-vcpkg-debug",
-      "configurePreset": "mingw-gcc-vcpkg-debug",
-      "targets": ["XRSim"]
+      "configurePreset": "mingw-gcc-vcpkg-debug"
     },
     {
       "name": "mingw-gcc-vcpkg-release",
-      "configurePreset": "mingw-gcc-vcpkg-release",
-      "targets": ["XRSim"]
+      "configurePreset": "mingw-gcc-vcpkg-release"
     },
     {
       "name": "ninja-gcc-debug",
-      "configurePreset": "ninja-gcc-debug",
-      "targets": ["XRSim"]
+      "configurePreset": "ninja-gcc-debug"
     },
     {
       "name": "ninja-gcc-release",
-      "configurePreset": "ninja-gcc-release",
-      "targets": ["XRSim"]
+      "configurePreset": "ninja-gcc-release"
     },
     {
       "name": "ninja-clang-debug",
-      "configurePreset": "ninja-clang-debug",
-      "targets": ["XRSim"]
+      "configurePreset": "ninja-clang-debug"
     },
     {
       "name": "ninja-clang-release",
-      "configurePreset": "ninja-clang-release",
-      "targets": ["XRSim"]
+      "configurePreset": "ninja-clang-release"
     }
   ]
 }
