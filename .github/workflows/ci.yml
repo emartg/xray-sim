@@ -99,14 +99,14 @@ jobs:
         include:
           - preset: ninja-msvc-debug
             toolchain: msvc
-            triplet: x64-windows-xray
+            triplet: x64-windows-xray-ci
             generator: Ninja
             build-type: Debug
             c-compiler: cl
             cxx-compiler: cl
           - preset: mingw-gcc-vcpkg-release
             toolchain: mingw
-            triplet: x64-mingw-dynamic-xray
+            triplet: x64-mingw-dynamic-xray-ci
             generator: MinGW Makefiles
             build-type: Release
             c-compiler: gcc
@@ -167,13 +167,16 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}\vcpkg-binary-cache
-          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg_triplets/*.cmake') }}
           restore-keys: |
             vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-
 
       - name: Configure
-        # vcpkg installs the dependencies of the manifest during the configuration (from the cache when available)
-        run: cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON
+        # vcpkg installs the dependencies of the manifest during the configuration (from the cache when available).
+        # The triplet is the CI one, for the target and for the host: it leaves the compiler out of the ABI hash of the
+        # packages, because the runner images change the build of the compiler (Visual Studio 18.10.2 and 18.10.3 have the
+        # same toolset) and the binary cache was never used, so every package was built again (11 minutes with MSVC)
+        run: cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DVCPKG_HOST_TRIPLET=${{ matrix.triplet }}
 
       - name: Save the vcpkg binary cache
         # saved even if a later step fails, so that the dependencies are not built again on the next run
@@ -181,7 +184,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}\vcpkg-binary-cache
-          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json') }}
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg_triplets/*.cmake') }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
