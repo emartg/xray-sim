@@ -4,7 +4,7 @@
  * - It reads the command line (--frames N renders N frames and exits, e.g., for automated smoke tests, and
  *   --xray-self-test computes the X-ray image of a test object in the first frame and checks it).
  * - It creates a GLFW_Renderer with the simulator's GUI, and initializes the Core engine.
- * - It sets up a minimal scene (a camera).
+ * - It creates the default scene of the simulator and fills the Engine's scene from it (camera, light, and shapes).
  * - It runs the main loop of the engine and shuts it down.
  */
 
@@ -17,13 +17,12 @@
 #include <utility>
 
 #include "core/Core.h"
-#include "core/camera/Camera.h"
-#include "core/managers/Node_Manager.h"
-#include "core/managers/Scene_Manager.h"
 
 #include "platform/renderer/GLFW_Renderer.h"
 
+#include "Scene_Builder.h"
 #include "Simulator_Gui.h"
+#include "scene/Scene.h"
 
 // Reads the command line. Returns false (after printing the reason) if an argument is not valid.
 // The number of frames is left at 0 (no limit, the simulator runs until the window is closed) unless --frames is given
@@ -83,9 +82,12 @@ int main(int argc, char** argv)
 
 	Core* engine = Core::get_instance(); // retrieve the singleton instance of the Core class
 
+	// the scene that the simulator shows, drawn by the Engine and (in the next steps) imaged by the X-ray library
+	const auto scene = std::make_shared<const Scene>(Scene::make_default_scene());
+
 	// create a GLFW_Renderer instance with the simulator's GUI, and set it as the renderer for the engine
 	GLFW_Renderer* renderer = new GLFW_Renderer();
-	renderer->set_gui_layer(std::make_unique<Simulator_Gui>(xray_self_test));
+	renderer->set_gui_layer(std::make_unique<Simulator_Gui>(scene, xray_self_test));
 	engine->set_renderer(renderer);
 
 	if (!engine->init())
@@ -94,10 +96,8 @@ int main(int argc, char** argv)
 		return -1;
 	}
 
-	// create a camera, since the renderer requires one to render the scene
-	auto camera = std::make_shared<Camera>("Camera");
-	engine->get_scene_manager()->set_camera(camera);
-	engine->get_node_manager()->add_node(std::move(camera));
+	// fill the Engine's scene with the camera, the light, and the shapes of the scene
+	Scene_Builder::build(*scene, engine);
 
 	engine->run(max_frames); // run the main loop of the engine (0 means until the window is closed)
 	engine->shutdown();      // clean up resources in the correct order and shut down the engine

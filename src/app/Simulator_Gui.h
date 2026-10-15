@@ -3,22 +3,26 @@
  * This file defines the Simulator_Gui class, which is the graphical user interface of the simulator.
  * It implements the Gui_Layer interface: the platform renderer owns the ImGui context and backends,
  * and calls this class to draw the windows every frame.
- * For now it draws a placeholder window, and it can run the self-test of the X-ray library inside the first frame
- * (see run_xray_self_test), until the panels of the simulator are written.
+ * For now it draws a placeholder window and the list of the objects of the scene, and it can run the self-test of the
+ * X-ray library inside the first frame (see run_xray_self_test), until the panels of the simulator are written.
  */
 
 #pragma once
 
+#include <memory>
+
 #include "platform/gui/Gui_Layer.h"
+#include "scene/Scene.h"
 
 class Simulator_Gui : public Gui_Layer
 {
 public:
 	// Constructors
 	// ------------
-	// If run_xray_self_test is true, the first frame computes the X-ray image of a test object with the X-ray library,
-	// on the context of the window, and checks it (see run_xray_self_test)
-	explicit Simulator_Gui(bool run_xray_self_test = false);
+	// The scene is the one that the list of objects shows (it can be null). If run_xray_self_test is true, the first
+	// frame computes the X-ray image of a test object with the X-ray library, on the context of the window, and checks
+	// it (see run_xray_self_test)
+	explicit Simulator_Gui(std::shared_ptr<const Scene> scene = nullptr, bool run_xray_self_test = false);
 
 	// Public Methods
 	// --------------
@@ -36,5 +40,6 @@ private:
 
 	// Private Attributes
 	// ------------------
-	bool is_xray_self_test_requested{ false };
+	std::shared_ptr<const Scene> scene;
+	bool                         is_xray_self_test_requested{ false };
 };

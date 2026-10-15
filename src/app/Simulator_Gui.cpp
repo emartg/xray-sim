@@ -7,6 +7,8 @@
 
 #include <imgui.h>
 
+#include "scene/Scene_Material_Table.h"
+
 #ifdef XRSIM_HAS_XRAY
 	#include <algorithm>
 	#include <cmath>
@@ -101,7 +103,10 @@ namespace
 
 // Constructors
 // ------------
-Simulator_Gui::Simulator_Gui(bool run_xray_self_test) : is_xray_self_test_requested{ run_xray_self_test } {}
+Simulator_Gui::Simulator_Gui(std::shared_ptr<const Scene> scene, bool run_xray_self_test) :
+	scene{ std::move(scene) },
+	is_xray_self_test_requested{ run_xray_self_test }
+{}
 
 // Public Methods
 // --------------
@@ -121,6 +126,38 @@ void Simulator_Gui::draw()
 	ImGui::Begin("XRSim");
 	ImGui::TextUnformatted("Projectional radiography simulator");
 	ImGui::End();
+
+	// the objects of the scene: the name, the shape, the material, and the position in centimetres
+	if (scene)
+	{
+		ImGui::SetNextWindowPos(ImVec2{ 20.0f, 110.0f }, ImGuiCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2{ 520.0f, 160.0f }, ImGuiCond_FirstUseEver);
+		ImGui::Begin("Scene");
+		if (ImGui::BeginTable("Objects", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders))
+		{
+			ImGui::TableSetupColumn("Name");
+			ImGui::TableSetupColumn("Shape");
+			ImGui::TableSetupColumn("Material");
+			ImGui::TableSetupColumn("Position (cm)");
+			ImGui::TableHeadersRow();
+
+			const std::vector<Scene_Material>& materials = Scene_Material_Table::get_materials();
+			for (const Scene_Object& object : scene->get_objects())
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(object.name.c_str());
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(Scene::get_shape_type_name(object.type));
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(object.material_index < materials.size() ? materials[object.material_index].name.c_str() : "?");
+				ImGui::TableNextColumn();
+				ImGui::Text("%.1f, %.1f, %.1f", object.position[0], object.position[1], object.position[2]);
+			}
+			ImGui::EndTable();
+		}
+		ImGui::End();
+	}
 }
 
 // Private Methods

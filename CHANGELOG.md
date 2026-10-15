@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Build instructions, the credits of the third-party libraries and resources (`docs/sources.md`), and the formatting configuration of the Engine (`.clang-format` and `.editorconfig`).
 - The adapter computes X-ray images: `Gvxr_Adapter` owns the X-ray renderer, the beam, the detector, and the meshes, and computes the image of the meshes on the OpenGL context of the Engine's window, inside the Engine's frame. It saves the state of OpenGL, sets the defaults that the library relies on, and restores the state after each call, and its interface uses plain types (`Xray_Types.h`), without headers of the library or of the Engine. A workaround is needed to register the current context with the library, which cannot adopt an existing one (it goes away when the library provides a function for it).
 - `--xray-self-test` option and `XRSim_Xray_Self_Test`: in the first frame, the simulator computes the X-ray image of a cube of water of 10 cm with a beam of 80 keV, and checks that the transmission is the one of the Beer-Lambert law (0.1593, within 3 percent) and that the state of OpenGL is unchanged.
+- The scene library `XRSim_Scene`: a cube, a sphere, and a cylinder as closed surfaces with outward triangles, a table of materials (water, aluminium, iron, and bone), and the `Scene` class, with a default scene and the X-ray meshes of its objects in millimetres (the unit of a scene is the centimetre), and its test `Scene_Test`, which also runs in the Windows jobs of the CI.
+- The Engine draws the default scene with its forward rendering (a camera, a directional light, and a node for each object, built by `Scene_Builder`), and a `Scene` window lists the objects.
 
 ### Fixed
 
