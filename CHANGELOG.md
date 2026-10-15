@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - gVirtualXRay, as a Git submodule of the fork, built as its core library alone (option `XRSIM_BUILD_XRAY`, off by default with MSVC), with the system packages on Linux and vcpkg packages on Windows (triplets `x64-windows-xray` and `x64-mingw-dynamic-xray`, which build GLEW as a static library, as the fork requires).
 - `XRSim_Xray`, the library that adapts gVirtualXRay to the simulator (it links the library privately and does not expose its headers), with the class `Gvxr_Adapter` and the test `Gvxr_Adapter_Test`.
 - Build instructions, the credits of the third-party libraries and resources (`docs/sources.md`), and the formatting configuration of the Engine (`.clang-format` and `.editorconfig`).
+- The adapter computes X-ray images: `Gvxr_Adapter` owns the X-ray renderer, the beam, the detector, and the meshes, and computes the image of the meshes on the OpenGL context of the Engine's window, inside the Engine's frame. It saves the state of OpenGL, sets the defaults that the library relies on, and restores the state after each call, and its interface uses plain types (`Xray_Types.h`), without headers of the library or of the Engine. A workaround is needed to register the current context with the library, which cannot adopt an existing one (it goes away when the library provides a function for it).
+- `--xray-self-test` option and `XRSim_Xray_Self_Test`: in the first frame, the simulator computes the X-ray image of a cube of water of 10 cm with a beam of 80 keV, and checks that the transmission is the one of the Beer-Lambert law (0.1593, within 3 percent) and that the state of OpenGL is unchanged.
 
 ### Fixed
 

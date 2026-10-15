@@ -1,7 +1,8 @@
 /*
  * main.cpp
  * This file is the entry point of the simulator. It follows these steps:
- * - It reads the command line (--frames N renders N frames and exits, e.g., for automated smoke tests).
+ * - It reads the command line (--frames N renders N frames and exits, e.g., for automated smoke tests, and
+ *   --xray-self-test computes the X-ray image of a test object in the first frame and checks it).
  * - It creates a GLFW_Renderer with the simulator's GUI, and initializes the Core engine.
  * - It sets up a minimal scene (a camera).
  * - It runs the main loop of the engine and shuts it down.
@@ -26,13 +27,25 @@
 
 // Reads the command line. Returns false (after printing the reason) if an argument is not valid.
 // The number of frames is left at 0 (no limit, the simulator runs until the window is closed) unless --frames is given
-bool parse_command_line(int argc, char** argv, std::uint64_t& max_frames)
+bool parse_command_line(int argc, char** argv, std::uint64_t& max_frames, bool& xray_self_test)
 {
-	max_frames = 0;
+	max_frames     = 0;
+	xray_self_test = false;
 
 	for (int i{ 1 }; i < argc; i++)
 	{ // iterate through the arguments (the first one is the program name)
 		const std::string_view argument{ argv[i] };
+		if (argument == "--xray-self-test")
+		{ // the self-test of the X-ray library, which needs the X-ray part of the simulator
+#ifdef XRSIM_HAS_XRAY
+			xray_self_test = true;
+			continue;
+#else
+			std::cerr << "[ERROR::main::parse_command_line] This build of the simulator has no X-ray part (--xray-self-test)" << std::endl;
+			return false;
+#endif
+		}
+
 		if (argument != "--frames")
 		{ // if the argument is unknown, print an error message and return false
 			std::cerr << "[ERROR::main::parse_command_line] Unknown argument: " << argument << std::endl;
@@ -62,7 +75,8 @@ bool parse_command_line(int argc, char** argv, std::uint64_t& max_frames)
 int main(int argc, char** argv)
 {
 	std::uint64_t max_frames{ 0 };
-	if (!parse_command_line(argc, argv, max_frames))
+	bool          xray_self_test{ false };
+	if (!parse_command_line(argc, argv, max_frames, xray_self_test))
 	{ // if the command line is not valid, exit with an error code
 		return -1;
 	}
@@ -71,7 +85,7 @@ int main(int argc, char** argv)
 
 	// create a GLFW_Renderer instance with the simulator's GUI, and set it as the renderer for the engine
 	GLFW_Renderer* renderer = new GLFW_Renderer();
-	renderer->set_gui_layer(std::make_unique<Simulator_Gui>());
+	renderer->set_gui_layer(std::make_unique<Simulator_Gui>(xray_self_test));
 	engine->set_renderer(renderer);
 
 	if (!engine->init())
