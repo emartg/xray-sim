@@ -7,8 +7,16 @@ file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ${HEADERS_DIR}/*.h*)
 set(SOURCES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/app)
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${SOURCES_DIR}/*.cpp)
 
+# The X-ray view is part of the X-ray part of the simulator
+if(NOT XRSIM_BUILD_XRAY)
+	list(FILTER SOURCES EXCLUDE REGEX "Xray_View[.]cpp$")
+endif()
+
 # The library that describes the scenes (shapes, materials, and objects)
 add_subdirectory(scene)
+
+# The library that converts an X-ray image to the grey values that the screen shows
+add_subdirectory(display)
 
 # The library that adapts gVirtualXRay to the simulator
 if(XRSIM_BUILD_XRAY)
@@ -18,7 +26,7 @@ endif()
 # Create the executable (headers and sources are listed so the IDEs display them), linked only against
 # the Platform library of the Engine (which provides the Core library)
 add_executable(XRSim ${SOURCES} ${HEADERS})
-target_link_libraries(XRSim PRIVATE Engine::Platform XRSim::Scene)
+target_link_libraries(XRSim PRIVATE Engine::Platform XRSim::Scene XRSim::Display)
 
 # Copy the runtime dependencies (DLLs) beside the executable (MinGW only, see the function of the Engine)
 engine_stage_runtime_dependencies(XRSim)
@@ -66,6 +74,17 @@ if(XRSIM_BUILD_TESTS)
 	# Self-test of the X-ray library: in the first frame, on the context of the window, it computes the X-ray image of
 	# a cube of water and checks it and the state of OpenGL. It needs an OpenGL 4.5 display, like the smoke test
 	if(XRSIM_BUILD_XRAY)
+		# Test of the X-ray view: in the first frame, it computes the X-ray image of the default scene and checks that each
+		# object attenuates the beam where it projects and that the corners are not attenuated. The smoke test above shows
+		# the image too, without checking it
+		add_test(NAME XRSim_Xray_View_Test COMMAND XRSim --frames 3 --xray-view-test)
+		set_tests_properties(XRSim_Xray_View_Test PROPERTIES
+			LABELS smoke
+			PASS_REGULAR_EXPRESSION "SUCCESS::XRAY_VIEW::check_image"
+			FAIL_REGULAR_EXPRESSION "[[]ERROR"
+			TIMEOUT 300
+		)
+
 		add_test(NAME XRSim_Xray_Self_Test COMMAND XRSim --frames 3 --xray-self-test)
 		set_tests_properties(XRSim_Xray_Self_Test PROPERTIES
 			LABELS smoke

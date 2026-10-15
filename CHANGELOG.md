@@ -18,6 +18,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `--xray-self-test` option and `XRSim_Xray_Self_Test`: in the first frame, the simulator computes the X-ray image of a cube of water of 10 cm with a beam of 80 keV, and checks that the transmission is the one of the Beer-Lambert law (0.1593, within 3 percent) and that the state of OpenGL is unchanged.
 - The scene library `XRSim_Scene`: a cube, a sphere, and a cylinder as closed surfaces with outward triangles, a table of materials (water, aluminium, iron, and bone), and the `Scene` class, with a default scene and the X-ray meshes of its objects in millimetres (the unit of a scene is the centimetre), and its test `Scene_Test`, which also runs in the Windows jobs of the CI.
 - The Engine draws the default scene with its forward rendering (a camera, a directional light, and a node for each object, built by `Scene_Builder`), and a `Scene` window lists the objects.
+- The X-ray image of the scene, next to the 3D view: `Xray_View` gives the meshes of the scene to gVirtualXRay once, computes the image of a point source and a flat detector (256 by 128 pixels of 2 mm, 80 keV) when the first frame is drawn and when the user presses the Recompute button, and shows it in an `X-ray` window. The `Single X-ray view` switch shows the image as the background of the whole window instead, and the scale (linear or logarithmic) and the negative can be chosen.
+- The display library `XRSim_Display`: the conversion of an X-ray image to grey values, relative to the unattenuated beam (linear or logarithmic, optionally negative), with its test `Xray_Display_Test`.
+- `--xray-view-test` option and `XRSim_Xray_View_Test`: in the first frame, the simulator checks that the corners of the X-ray image of the scene are not attenuated, that the beam is attenuated where each object projects, and that the iron sphere attenuates more than the water sphere.
 
 ### Fixed
 
