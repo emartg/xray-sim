@@ -19,6 +19,7 @@
 
 	#include <glad/glad.h>
 
+	#include "Xray_View.h"
 	#include "xray/Gvxr_Adapter.h"
 
 namespace
@@ -103,10 +104,20 @@ namespace
 
 // Constructors
 // ------------
-Simulator_Gui::Simulator_Gui(std::shared_ptr<const Scene> scene, bool run_xray_self_test) :
+Simulator_Gui::Simulator_Gui(std::shared_ptr<const Scene> scene, bool run_xray_self_test, bool run_xray_view_test) :
 	scene{ std::move(scene) },
 	is_xray_self_test_requested{ run_xray_self_test }
-{}
+{
+#ifdef XRSIM_HAS_XRAY
+	xray_view = std::make_unique<Xray_View>(this->scene, run_xray_view_test);
+#else
+	static_cast<void>(run_xray_view_test);
+#endif
+}
+
+// Destructor
+// ----------
+Simulator_Gui::~Simulator_Gui() = default;
 
 // Public Methods
 // --------------
@@ -158,6 +169,12 @@ void Simulator_Gui::draw()
 		}
 		ImGui::End();
 	}
+
+#ifdef XRSIM_HAS_XRAY
+	// the X-ray image of the scene: a window next to the 3D view, or the background of the whole window
+	if (xray_view)
+		xray_view->draw();
+#endif
 }
 
 // Private Methods

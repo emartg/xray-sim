@@ -11,6 +11,17 @@ set_tests_properties(Scene_Test PROPERTIES
 	TIMEOUT 60
 )
 
+# Test of the display library (the conversion of an X-ray image to grey values): it needs no OpenGL context either
+add_executable(Xray_Display_Test display/XrayDisplayTest.cpp)
+target_link_libraries(Xray_Display_Test PRIVATE XRSim::Display)
+
+add_test(NAME Xray_Display_Test COMMAND Xray_Display_Test)
+set_tests_properties(Xray_Display_Test PROPERTIES
+	LABELS unit
+	FAIL_REGULAR_EXPRESSION "[[]ERROR"
+	TIMEOUT 60
+)
+
 # Test of the adapter of gVirtualXRay (only with the X-ray part): it needs no OpenGL context, so it runs on any machine
 if(XRSIM_BUILD_XRAY)
 	add_executable(Gvxr_Adapter_Test xray/Gvxr_AdapterTest.cpp)
