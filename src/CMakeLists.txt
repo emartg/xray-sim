@@ -7,6 +7,9 @@ file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS ${HEADERS_DIR}/*.h*)
 set(SOURCES_DIR ${CMAKE_CURRENT_SOURCE_DIR}/app)
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS ${SOURCES_DIR}/*.cpp)
 
+# The library that describes the scenes (shapes, materials, and objects)
+add_subdirectory(scene)
+
 # The library that adapts gVirtualXRay to the simulator
 if(XRSIM_BUILD_XRAY)
 	add_subdirectory(xray)
@@ -15,7 +18,7 @@ endif()
 # Create the executable (headers and sources are listed so the IDEs display them), linked only against
 # the Platform library of the Engine (which provides the Core library)
 add_executable(XRSim ${SOURCES} ${HEADERS})
-target_link_libraries(XRSim PRIVATE Engine::Platform)
+target_link_libraries(XRSim PRIVATE Engine::Platform XRSim::Scene)
 
 # Copy the runtime dependencies (DLLs) beside the executable (MinGW only, see the function of the Engine)
 engine_stage_runtime_dependencies(XRSim)

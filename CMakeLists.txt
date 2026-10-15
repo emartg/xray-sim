@@ -95,6 +95,6 @@ endif()
 add_subdirectory(src)
 
 # Add the tests of the libraries of the simulator
-if(XRSIM_BUILD_TESTS AND XRSIM_BUILD_XRAY)
+if(XRSIM_BUILD_TESTS)
 	add_subdirectory(tests)
 endif()

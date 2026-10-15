@@ -71,6 +71,7 @@ The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). The first th
 - `XRSim_Smoke_Test` renders 60 frames, and fails if the exit code is not zero or if a line contains `[ERROR`. It needs an OpenGL 4.5 display (on Linux without one, run it with `xvfb-run -a`, which needs the `xvfb` and `libgl1-mesa-dri` packages).
 - `XRSim_Invalid_Argument_Test` checks that an invalid argument is rejected. It needs no display.
 - `XRSim_Xray_Self_Test` (only with the X-ray part) runs `XRSim --frames 3 --xray-self-test`: in the first frame, on the OpenGL context of the Engine's window, it computes the X-ray image of a cube of water of 10 cm with a beam of 80 keV, and checks that the cube transmits the beam as the Beer-Lambert law predicts (within 3 percent), and that the state of OpenGL is the same before and after the computation. It needs an OpenGL 4.5 display, like the smoke test.
+- `Scene_Test` (label `unit`) checks the scene library without an OpenGL context: the shapes (closed surfaces, outward triangles, and the volume that each one should enclose), the table of materials, and that the default scene gives X-ray meshes in millimetres with the transform of each object applied.
 - `Gvxr_Adapter_Test` (label `unit`, only with the X-ray part) checks that the simulator can use gVirtualXRay: the version is reported and the library creates a mixture of chemical elements, without an OpenGL context.
 
 ```

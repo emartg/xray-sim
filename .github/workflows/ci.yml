@@ -190,4 +190,4 @@ jobs:
         run: cmake --build --preset ${{ matrix.preset }} --parallel
 
       - name: Run the tests that need no display
-        run: ctest --test-dir out/build/${{ matrix.preset }} -R "XRSim_Invalid_Argument_Test|Gvxr_Adapter_Test" --output-on-failure
+        run: ctest --test-dir out/build/${{ matrix.preset }} -R "XRSim_Invalid_Argument_Test|Scene_Test|Gvxr_Adapter_Test" --output-on-failure
