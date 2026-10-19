@@ -58,9 +58,7 @@ void Xray_View::draw()
 
 	if (!adapter && error.empty())
 	{ // the first time: the context of the window is current, so the adapter can start, and the image is computed
-		initialise();
-		if (error.empty())
-			compute();
+		apply_setup();
 	}
 
 	if (is_check_requested && is_image_valid)
@@ -69,6 +67,8 @@ void Xray_View::draw()
 		check_image();
 	}
 
+	// the setup is drawn first, so that the image that it changes is the one that the X-ray window shows in the same frame
+	draw_setup_window();
 	draw_window();
 	if (is_single_view && texture != 0)
 		draw_background();
@@ -76,24 +76,19 @@ void Xray_View::draw()
 
 // Private Methods
 // ---------------
-void Xray_View::initialise()
+void Xray_View::apply_setup()
 {
-	Xray_Beam beam;
-	beam.source_position = { 0.0, 0.0, SOURCE_Z };
-	beam.energy          = BEAM_ENERGY;
+	setup.clamp();
+	error.clear();
+	is_setup_dirty = false;
 
-	Xray_Detector detector;
-	detector.position         = { 0.0, 0.0, DETECTOR_Z };
-	detector.up_vector        = { 0.0, 1.0, 0.0 };
-	detector.width_in_pixels  = DETECTOR_WIDTH_IN_PIXELS;
-	detector.height_in_pixels = DETECTOR_HEIGHT_IN_PIXELS;
-	detector.pixel_size       = PIXEL_SIZE;
-
+	// the old adapter is destroyed first: the library keeps one graphics context, which the new adapter registers
+	adapter.reset();
 	auto new_adapter = std::make_unique<Gvxr_Adapter>();
 
-	error = new_adapter->initialise(beam, detector);
+	error = new_adapter->initialise(setup.make_beam(), setup.make_detector());
 	if (error.empty())
-	{ // the meshes are uploaded once, in millimetres, with the transform of each object applied
+	{ // the meshes are uploaded in millimetres, with the transform of each object applied
 		for (const Xray_Mesh& mesh : scene->make_xray_meshes())
 		{
 			error = new_adapter->add_mesh(mesh);
@@ -102,9 +97,16 @@ void Xray_View::initialise()
 		}
 	}
 
+	adapter     = std::move(new_adapter); // kept even after a failure, so that the initialisation is not tried again every frame
+	image_setup = setup;
+
 	if (!error.empty())
-		std::cerr << "[ERROR::XRAY_VIEW::initialise] " << error << std::endl;
-	adapter = std::move(new_adapter); // kept even after a failure, so that the initialisation is not tried again every frame
+	{
+		is_image_valid = false;
+		std::cerr << "[ERROR::XRAY_VIEW::apply_setup] " << error << std::endl;
+		return;
+	}
+	compute();
 }
 
 void Xray_View::compute()
@@ -151,8 +153,16 @@ void Xray_View::update_texture()
 	if (!is_image_valid)
 		return;
 
+	if (texture != 0 && (texture_width != image.width || texture_height != image.height))
+	{ // the storage of a texture cannot change its size: it is created again
+		glDeleteTextures(1, &texture);
+		texture = 0;
+	}
+
 	if (texture == 0)
 	{ // one byte per pixel, shown as grey (the red channel is copied to the three colour channels)
+		texture_width  = image.width;
+		texture_height = image.height;
 		glCreateTextures(GL_TEXTURE_2D, 1, &texture);
 		glTextureStorage2D(texture, 1, GL_R8, static_cast<GLsizei>(image.width), static_cast<GLsizei>(image.height));
 		glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -184,6 +194,77 @@ void Xray_View::update_texture()
 	is_texture_dirty = false;
 }
 
+void Xray_View::draw_setup_window()
+{
+	// the window is under the X-ray window, at the right of the 3D view
+	const ImVec2 display = ImGui::GetIO().DisplaySize;
+	ImGui::SetNextWindowPos(ImVec2{ std::max(display.x - 580.0f, 0.0f), 410.0f }, ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2{ 560.0f, 250.0f }, ImGuiCond_FirstUseEver);
+	ImGui::Begin("X-ray setup");
+
+	// the values are clamped by the sliders (also when a value is typed), so that they are always valid
+	bool      is_changed{ false };
+	const int clamp_flag = ImGuiSliderFlags_AlwaysClamp;
+	is_changed |= ImGui::SliderFloat("Energy (keV)", &setup.energy, Xray_Setup::MIN_ENERGY, Xray_Setup::MAX_ENERGY, "%.0f", clamp_flag);
+	is_changed |= ImGui::SliderFloat(
+		"Source distance (cm)",
+		&setup.source_distance,
+		Xray_Setup::MIN_SOURCE_DISTANCE,
+		Xray_Setup::MAX_SOURCE_DISTANCE,
+		"%.0f",
+		clamp_flag);
+	is_changed |= ImGui::SliderFloat(
+		"Detector distance (cm)",
+		&setup.detector_distance,
+		Xray_Setup::MIN_DETECTOR_DISTANCE,
+		Xray_Setup::MAX_DETECTOR_DISTANCE,
+		"%.0f",
+		clamp_flag);
+	is_changed |= ImGui::SliderFloat(
+		"Pixel size (mm)",
+		&setup.pixel_size,
+		Xray_Setup::MIN_PIXEL_SIZE,
+		Xray_Setup::MAX_PIXEL_SIZE,
+		"%.1f",
+		clamp_flag);
+
+	int width  = static_cast<int>(setup.width_in_pixels);
+	int height = static_cast<int>(setup.height_in_pixels);
+	if (ImGui::SliderInt("Detector width (pixels)", &width, Xray_Setup::MIN_PIXELS, Xray_Setup::MAX_PIXELS, "%d", clamp_flag))
+	{
+		setup.width_in_pixels = static_cast<unsigned int>(width);
+		is_changed            = true;
+	}
+	if (ImGui::SliderInt("Detector height (pixels)", &height, Xray_Setup::MIN_PIXELS, Xray_Setup::MAX_PIXELS, "%d", clamp_flag))
+	{
+		setup.height_in_pixels = static_cast<unsigned int>(height);
+		is_changed             = true;
+	}
+
+	ImGui::Text(
+		"Magnification %.2f, detector %.0f x %.0f mm",
+		setup.get_magnification(),
+		setup.width_in_pixels * setup.pixel_size,
+		setup.height_in_pixels * setup.pixel_size);
+
+	ImGui::Checkbox("Recompute on change", &is_auto_recompute);
+	ImGui::SameLine();
+	const bool is_apply_pressed = ImGui::Button("Apply");
+	ImGui::SameLine();
+	if (ImGui::Button("Reset"))
+	{
+		setup      = Xray_Setup{};
+		is_changed = true;
+	}
+
+	if (is_changed)
+		is_setup_dirty = true;
+	if (is_setup_dirty && (is_auto_recompute || is_apply_pressed))
+		apply_setup();
+
+	ImGui::End();
+}
+
 void Xray_View::draw_window()
 {
 	// the window is at the right of the 3D view, where it is visible from the first frame
@@ -198,7 +279,12 @@ void Xray_View::draw_window()
 	ImGui::Checkbox("Single X-ray view", &is_single_view);
 	ImGui::SameLine();
 	if (ImGui::Button("Recompute"))
-		compute();
+	{ // after an error, the adapter is created again
+		if (error.empty() && adapter)
+			compute();
+		else
+			apply_setup();
+	}
 
 	int mode = static_cast<int>(display_settings.mode);
 	if (ImGui::Combo("Scale", &mode, "Linear\0Logarithmic\0"))
@@ -219,8 +305,8 @@ void Xray_View::draw_window()
 			"%u x %u pixels of %.1f mm, %.0f keV, computed in %.0f ms",
 			image.width,
 			image.height,
-			PIXEL_SIZE,
-			BEAM_ENERGY,
+			image_setup.pixel_size,
+			image_setup.energy,
 			compute_time_ms);
 	}
 
@@ -261,13 +347,13 @@ void Xray_View::draw_background() const
 
 double Xray_View::get_transmission_at(float x, float y) const
 {
-	// the point is in the plane z = 0 of the scene: the source projects it on the detector with a magnification of
-	// (DETECTOR_Z - SOURCE_Z) / (0 - SOURCE_Z). The centre of the detector is the pixel at half of the width and of the height
-	const double magnification = (DETECTOR_Z - SOURCE_Z) / -SOURCE_Z;
-	const double column        = image.width / 2.0 + static_cast<double>(x) * Scene::MILLIMETRES_PER_UNIT * magnification / PIXEL_SIZE;
-	const double row           = image.height / 2.0 + static_cast<double>(y) * Scene::MILLIMETRES_PER_UNIT * magnification / PIXEL_SIZE;
-	const int    centre_x      = static_cast<int>(std::floor(column));
-	const int    centre_y      = static_cast<int>(std::floor(row));
+	// the point is in the plane z = 0 of the scene: the source projects it on the detector with the magnification of the setup of the
+	// image. The centre of the detector is the pixel at half of the width and of the height
+	const double scale    = static_cast<double>(Scene::MILLIMETRES_PER_UNIT) * image_setup.get_magnification() / image_setup.pixel_size;
+	const double column   = image.width / 2.0 + static_cast<double>(x) * scale;
+	const double row      = image.height / 2.0 + static_cast<double>(y) * scale;
+	const int    centre_x = static_cast<int>(std::floor(column));
+	const int    centre_y = static_cast<int>(std::floor(row));
 	if (centre_x < 1 || centre_y < 1 || centre_x + 1 >= static_cast<int>(image.width) || centre_y + 1 >= static_cast<int>(image.height))
 		return -1.0;
 
@@ -277,22 +363,17 @@ double Xray_View::get_transmission_at(float x, float y) const
 	return sum / 9.0 / reference;
 }
 
-void Xray_View::check_image() const
+std::string Xray_View::check_current_image(double& water_transmission, double& iron_transmission) const
 {
-	const auto fail = [](const std::string& reason) {
-		std::cerr << "[ERROR::XRAY_VIEW::check_image] " << reason << std::endl;
-	};
+	water_transmission = -1.0;
+	iron_transmission  = -1.0;
 
+	if (!error.empty() || !is_image_valid)
+		return "There is no valid image: " + error;
 	if (!(reference > 0.0f))
-	{
-		fail("The image has no beam");
-		return;
-	}
+		return "The image has no beam";
 	if (!std::all_of(image.pixels.begin(), image.pixels.end(), [](float value) { return std::isfinite(value) && value >= 0.0f; }))
-	{
-		fail("The image has negative or non-finite values");
-		return;
-	}
+		return "The image has negative or non-finite values";
 
 	// the corners of the detector are far from the objects: the beam there is nearly unattenuated
 	double corner_transmission{ 1.0 };
@@ -303,27 +384,37 @@ void Xray_View::check_image() const
 		corner_transmission = std::min(corner_transmission, static_cast<double>(image.pixels[index]) / reference);
 	std::cout << "[INFO::XRAY_VIEW::check_image] lowest transmission in the corners: " << corner_transmission << std::endl;
 	if (corner_transmission < 0.9)
-	{
-		fail("The corners of the image are attenuated (transmission " + std::to_string(corner_transmission) + ")");
-		return;
-	}
+		return "The corners of the image are attenuated (transmission " + std::to_string(corner_transmission) + ")";
 
 	// each object attenuates the beam where its centre projects (the objects are in the plane z = 0 in the default scene)
-	double water{ -1.0 };
-	double iron{ -1.0 };
 	for (const Scene_Object& object : scene->get_objects())
 	{
 		const double transmission = get_transmission_at(object.position[0], object.position[1]);
 		std::cout << "[INFO::XRAY_VIEW::check_image] transmission behind '" << object.name << "': " << transmission << std::endl;
 		if (!(transmission >= 0.0 && transmission < 0.9))
-		{
-			fail("The beam is not attenuated behind '" + object.name + "' (transmission " + std::to_string(transmission) + ")");
-			return;
-		}
+			return "The beam is not attenuated behind '" + object.name + "' (transmission " + std::to_string(transmission) + ")";
 		if (object.name == "Water Sphere")
-			water = transmission;
+			water_transmission = transmission;
 		if (object.name == "Iron Sphere")
-			iron = transmission;
+			iron_transmission = transmission;
+	}
+	return "";
+}
+
+void Xray_View::check_image()
+{
+	const auto fail = [](const std::string& reason) {
+		std::cerr << "[ERROR::XRAY_VIEW::check_image] " << reason << std::endl;
+	};
+
+	// the first image, with the setup of the start
+	double      water{ -1.0 };
+	double      iron{ -1.0 };
+	std::string reason = check_current_image(water, iron);
+	if (!reason.empty())
+	{
+		fail(reason);
+		return;
 	}
 	if (water >= 0.0 && iron >= 0.0 && !(iron < water))
 	{
@@ -333,5 +424,69 @@ void Xray_View::check_image() const
 		return;
 	}
 
-	std::cout << "[SUCCESS::XRAY_VIEW::check_image] The X-ray image of the scene is valid and each object attenuates the beam" << std::endl;
+	// a lower energy attenuates more (the mass attenuation coefficient of water is 0.268 cm2/g at 40 keV and 0.184 cm2/g at 80 keV, so
+	// the 8 cm of the water sphere transmit 12 percent instead of 23 percent)
+	const Xray_Setup original = setup;
+	setup.energy              = 40.0f;
+	apply_setup();
+	double water_at_40_kev{ -1.0 };
+	double iron_at_40_kev{ -1.0 };
+	reason = check_current_image(water_at_40_kev, iron_at_40_kev);
+	std::cout << "[INFO::XRAY_VIEW::check_image] transmission behind the water sphere: " << water << " at 80 keV, " << water_at_40_kev
+			  << " at 40 keV" << std::endl;
+	if (!reason.empty())
+	{
+		fail("At 40 keV: " + reason);
+		return;
+	}
+	if (water >= 0.0 && !(water_at_40_kev < 0.8 * water))
+	{
+		fail(
+			"The water sphere does not attenuate more at 40 keV (" + std::to_string(water_at_40_kev) + ") than at 80 keV (" +
+			std::to_string(water) + ")");
+		return;
+	}
+
+	// another geometry and another detector: the image has the new size, and the shadows are where the new magnification puts them
+	setup                   = original;
+	setup.source_distance   = 150.0f;
+	setup.detector_distance = 100.0f;
+	setup.pixel_size        = 4.0f;
+	setup.width_in_pixels   = 128;
+	setup.height_in_pixels  = 64;
+	apply_setup();
+	reason = check_current_image(water, iron);
+	if (reason.empty() && (image.width != 128 || image.height != 64))
+		reason = "The image is " + std::to_string(image.width) + " by " + std::to_string(image.height) + " pixels, not 128 by 64";
+	if (reason.empty())
+	{ // the texture is created again with the new size, without an error of OpenGL
+		while (glGetError() != GL_NO_ERROR)
+		{}
+		update_texture();
+		if (glGetError() != GL_NO_ERROR || texture == 0 || texture_width != 128 || texture_height != 64)
+			reason = "The texture of the image was not created again with the new size";
+	}
+	if (reason.empty() && water >= 0.0 && iron >= 0.0 && !(iron < water))
+		reason = "The iron sphere does not attenuate more than the water sphere";
+	if (!reason.empty())
+	{
+		fail("With another geometry and detector: " + reason);
+		return;
+	}
+
+	// the setup of the start again (it also checks that the image comes back)
+	setup = original;
+	apply_setup();
+	reason = check_current_image(water, iron);
+	if (reason.empty() && (image.width != original.width_in_pixels || image.height != original.height_in_pixels))
+		reason = "The image has not its first size again";
+	if (!reason.empty())
+	{
+		fail("With the setup of the start again: " + reason);
+		return;
+	}
+
+	std::cout << "[SUCCESS::XRAY_VIEW::check_image] The X-ray images of the scene are valid, each object attenuates the beam, and the "
+				 "changes of the setup take effect"
+			  << std::endl;
 }
