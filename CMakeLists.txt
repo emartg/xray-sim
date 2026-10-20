@@ -28,6 +28,10 @@ else()
 endif()
 option(XRSIM_BUILD_XRAY "Build the X-ray part of the simulator (gVirtualXRay and its adapter)" ${XRSIM_BUILD_XRAY_DEFAULT})
 
+# The folders of the submodules must be at the commits that the repository records for them (see cmake/submodule_pins.cmake):
+# with this option, the stop becomes a warning
+option(XRSIM_ALLOW_UNPINNED_SUBMODULES "Warn instead of stopping when engine/ or gvirtual-xray/ is not at the commit that the repository records for it" OFF)
+
 # Set default build type to Debug if not specified (single-configuration generators only, like Makefile or Ninja)
 if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose the type of build (Debug or Release)" FORCE)
@@ -47,6 +51,14 @@ endif()
 if(NOT EXISTS "${PROJECT_SOURCE_DIR}/engine/CMakeLists.txt")
 	message(FATAL_ERROR "The Engine was not found in ${PROJECT_SOURCE_DIR}/engine.\n"
 		"Fetch the Git submodules with: git submodule update --init engine")
+endif()
+
+# The build uses the contents of the folders of the submodules, so they must be at the recorded commits (the pins): the Engine
+# always, and gVirtualXRay when the X-ray part is built
+include(cmake/submodule_pins.cmake)
+xrsim_check_submodule_pin(engine)
+if(XRSIM_BUILD_XRAY)
+	xrsim_check_submodule_pin(gvirtual-xray)
 endif()
 
 # Add the Engine (Core and Platform libraries; its sample App is not built when it is not the top-level project)

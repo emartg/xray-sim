@@ -1,5 +1,19 @@
 ## CMakeLists.txt for the tests of the libraries of the simulator
 
+# Test of the pin guard (cmake/submodule_pins.cmake): it creates small Git repositories in the build directory and runs the guard on them, so it
+# needs Git (it is skipped without it) and no display
+add_test(NAME Submodule_Pin_Guard_Test COMMAND ${CMAKE_COMMAND}
+	-DGUARD_MODULE=${PROJECT_SOURCE_DIR}/cmake/submodule_pins.cmake
+	-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/submodule_pin_guard
+	-P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/submodule_pin_guard_test.cmake)
+set_tests_properties(Submodule_Pin_Guard_Test PROPERTIES
+	LABELS unit
+	PASS_REGULAR_EXPRESSION "SUCCESS::SUBMODULE_PIN_GUARD_TEST"
+	SKIP_REGULAR_EXPRESSION "SKIPPED"
+	FAIL_REGULAR_EXPRESSION "[[]ERROR"
+	TIMEOUT 120
+)
+
 # Test of the scene library (shapes, materials, and the default scene): it needs no OpenGL context, so it runs on any machine
 add_executable(Scene_Test scene/SceneTest.cpp)
 target_link_libraries(Scene_Test PRIVATE XRSim::Scene)
