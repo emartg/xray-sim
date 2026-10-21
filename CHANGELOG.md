@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `--xray-view-test` option and `XRSim_Xray_View_Test`: in the first frame, the simulator checks that the corners of the X-ray image of the scene are not attenuated, that the beam is attenuated where each object projects, and that the iron sphere attenuates more than the water sphere. It also changes the setup, and checks that a lower energy attenuates more and that another geometry and detector give a valid image of the new size.
 - The pin guard: CMake stops at configure time when `engine/` or `gvirtual-xray/` (when the X-ray part is on) is not at the commit that the repository records for it. The index is compared, so a new pin can be tried with `git add` before it is committed. The message names the folder, both commits, and the two ways out (`git submodule update <folder>`, or `git add <folder>` and a commit); the option `XRSIM_ALLOW_UNPINNED_SUBMODULES` turns the stop into a warning; and the check is skipped, with a status message, when Git is not available, the sources are not a Git checkout, or a submodule was not fetched. Its test, `Submodule_Pin_Guard_Test`, creates small Git repositories and runs the guard on them.
 
+### Changed
+
+- The README describes the current state of the prototype (the scene drawn by the engine, the X-ray image of the scene, the controls of the X-ray setup, the pin check, and what comes next) and the structure of `src/`, `tests/`, and `cmake/`.
+
 ### Fixed
 
 - The Windows jobs of the CI use their vcpkg binary cache when GitHub moves a job to another build of the runner image: the CI triplets leave the compiler out of the ABI hash of the packages.
