@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Changed
 
 - The README describes the current state of the prototype (the scene drawn by the engine, the X-ray image of the scene, the controls of the X-ray setup, the pin check, and what comes next) and the structure of `src/`, `tests/`, and `cmake/`.
+- The pointer of the gVirtualXRay submodule moves to the latest commit of the fork, which has: the function `Context::adoptCurrentContext()`, to use the OpenGL context of the application (the simulator still uses its workaround, until a later change); the include of its MinGW fix header only with MinGW, which the MSVC build needs; the coverage flags of its Debug build as an option that is off by default; and changes of its own continuous integration. The Engine stays at v0.9.0.
 
 ### Fixed
 
