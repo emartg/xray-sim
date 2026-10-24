@@ -226,6 +226,19 @@ void Simulator_Gui::run_xray_self_test()
 
 	const std::vector<std::pair<std::string, GLint>> state_after = capture_gl_state();
 
+	// the times of the calls: one mesh, and the parts of the initialisation are not longer than the whole
+	const Xray_Timings& timings = adapter.get_timings();
+	std::cout << "[INFO::SIMULATOR_GUI::run_xray_self_test] times in ms: initialise " << timings.initialise_ms << " (GLEW "
+			  << timings.glew_ms << ", renderer " << timings.renderer_initialise_ms << "), add meshes " << timings.add_meshes_ms
+			  << ", computation " << timings.computation_ms << ", read-back " << timings.read_back_ms << ", state guard "
+			  << timings.guard_ms << std::endl;
+	if (timings.mesh_count != 1 || !(timings.initialise_ms > 0.0) || !(timings.computation_ms > 0.0) || !(timings.read_back_ms >= 0.0) ||
+		timings.glew_ms + timings.renderer_initialise_ms > timings.initialise_ms || !(timings.guard_ms > 0.0))
+	{
+		fail("The times of the adapter are not valid");
+		return;
+	}
+
 	// the state of OpenGL must be the same after the computation
 	bool is_state_the_same{ true };
 	for (std::size_t i = 0; i < state_before.size(); ++i)

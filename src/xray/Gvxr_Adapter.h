@@ -62,6 +62,9 @@ public:
 	// Getters
 	bool get_is_initialised() const;
 
+	// The times that the calls of the adapter took (see Xray_Timings)
+	const Xray_Timings& get_timings() const;
+
 private:
 	// Private Attributes
 	// ------------------

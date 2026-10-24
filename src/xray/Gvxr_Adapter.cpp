@@ -9,6 +9,7 @@
 
 #include "xray/Gvxr_Adapter.h"
 
+#include <chrono>
 #include <exception>
 #include <map>
 #include <memory>
@@ -42,14 +43,38 @@ namespace
 	// Mixed-precision flag of the renderer: every buffer in full precision (the default of the library's own interface)
 	constexpr std::uint8_t FULL_PRECISION_FLAG{ 255 };
 
-	// Saves the state of OpenGL that the library changes when it is created, and restores it when it is destroyed
+	// Adds the time between its creation and its destruction to a total, in milliseconds
+	class Scoped_Timer
+	{
+	public:
+		explicit Scoped_Timer(double& total_ms) : total_ms{ total_ms }, start{ std::chrono::steady_clock::now() } {}
+
+		Scoped_Timer(const Scoped_Timer&)            = delete;
+		Scoped_Timer& operator=(const Scoped_Timer&) = delete;
+
+		~Scoped_Timer() { total_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count(); }
+
+	private:
+		double&                                     total_ms;
+		const std::chrono::steady_clock::time_point start;
+	};
+
+	// Returns the milliseconds since the time point
+	double get_milliseconds_since(std::chrono::steady_clock::time_point start)
+	{
+		return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	}
+
+	// Saves the state of OpenGL that the library changes when it is created, and restores it when it is destroyed. The time that it
+	// takes (the creation and the destruction) is added to the total that is given
 	class Gl_State_Guard
 	{
 	public:
 		// Constructors
 		// ------------
-		Gl_State_Guard()
+		explicit Gl_State_Guard(double& total_ms) : total_ms{ total_ms }
 		{
+			const Scoped_Timer timer{ total_ms };
 			glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_framebuffer);
 			glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_framebuffer);
 			glGetIntegerv(GL_VIEWPORT, viewport);
@@ -96,6 +121,7 @@ namespace
 		// ----------
 		~Gl_State_Guard()
 		{
+			const Scoped_Timer timer{ total_ms };
 			glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(draw_framebuffer));
 			glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(read_framebuffer));
 			glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
@@ -171,6 +197,7 @@ namespace
 
 		// Private Attributes
 		// ------------------
+		double&   total_ms;
 		GLint     draw_framebuffer{ 0 }, read_framebuffer{ 0 };
 		GLint     viewport[4]{}, scissor_box[4]{};
 		GLint     program{ 0 }, vertex_array{ 0 }, array_buffer{ 0 }, active_texture{ GL_TEXTURE0 };
@@ -214,6 +241,7 @@ struct Gvxr_Adapter::Implementation
 	std::vector<std::unique_ptr<gVirtualXRay::PolygonMesh>> meshes;
 	unsigned int                                            width{ 0 }, height{ 0 };
 	bool                                                    is_initialised{ false };
+	Xray_Timings                                            timings;
 };
 
 // Constructors
@@ -228,7 +256,8 @@ Gvxr_Adapter::~Gvxr_Adapter()
 	{
 		try
 		{
-			Gl_State_Guard guard; // the release of the renderer changes the state of OpenGL
+			double         guard_ms{ 0.0 };   // the time of the release is not reported
+			Gl_State_Guard guard{ guard_ms }; // the release of the renderer changes the state of OpenGL
 			implementation->meshes.clear();
 			implementation->renderer.release();
 			gVirtualXRay::ResourceManager::getInstance().setGraphicsContext(nullptr);
@@ -276,10 +305,12 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 		return "The adapter is already initialised";
 	}
 
+	const Scoped_Timer initialise_timer{ implementation->timings.initialise_ms };
 	try
 	{
 		// load the OpenGL functions of the library on the current context (the experimental flag is required by the
 		// core profile of the Engine)
+		const auto glew_start   = std::chrono::steady_clock::now();
 		glewExperimental        = GL_TRUE;
 		const GLenum glew_error = glewInit();
 		// GLEW reports that it has no GLX display on contexts that were not created through GLX (e.g., Wayland or
@@ -290,6 +321,7 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 		}
 		while (glGetError() != GL_NO_ERROR) // glewInit leaves an error in a core profile
 		{}
+		implementation->timings.glew_ms = get_milliseconds_since(glew_start);
 
 		if (detector.width_in_pixels == 0 || detector.height_in_pixels == 0 || !(detector.pixel_size > 0.0))
 		{
@@ -321,13 +353,15 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 			return "The beam has an invalid energy or number of photons";
 		}
 
-		Gl_State_Guard guard; // the initialisation of the renderer creates framebuffers and textures
+		Gl_State_Guard guard{ implementation->timings.guard_ms }; // the initialisation of the renderer creates framebuffers and textures
 
 		// register the current context (the one of the Engine's window) as the graphics context of the library
 		implementation->context.m_ready = true;
 		gVirtualXRay::ResourceManager::getInstance().setGraphicsContext(&implementation->context);
+		const auto renderer_start = std::chrono::steady_clock::now();
 		implementation->renderer
 			.initialise(gVirtualXRay::XRayRenderer::OPENGL, FULL_PRECISION_FLAG, &implementation->detector, &implementation->beam);
+		implementation->timings.renderer_initialise_ms = get_milliseconds_since(renderer_start);
 		implementation->renderer.enableArtifactFilteringOnGPU();
 		implementation->renderer.useNegativeFilteringFlag(false);
 		implementation->is_initialised = true; // the renderer is ready once it has meshes (see compute_image)
@@ -358,9 +392,10 @@ std::string Gvxr_Adapter::add_mesh(const Xray_Mesh& mesh)
 		}
 	}
 
+	const Scoped_Timer add_mesh_timer{ implementation->timings.add_meshes_ms };
 	try
 	{
-		Gl_State_Guard guard; // the upload of the mesh changes the buffer bindings
+		Gl_State_Guard guard{ implementation->timings.guard_ms }; // the upload of the mesh changes the buffer bindings
 
 		auto polygon_mesh = std::make_unique<gVirtualXRay::PolygonMesh>();
 		polygon_mesh->setInternalData(
@@ -379,6 +414,7 @@ std::string Gvxr_Adapter::add_mesh(const Xray_Mesh& mesh)
 		implementation->renderer.addInnerSurface(polygon_mesh.get());
 		implementation->renderer.needUpdateSurfacePerMaterial();
 		implementation->meshes.push_back(std::move(polygon_mesh));
+		++implementation->timings.mesh_count;
 	}
 	catch (...)
 	{
@@ -397,19 +433,25 @@ std::string Gvxr_Adapter::compute_image(Xray_Image& image)
 
 	try
 	{
-		Gl_State_Guard guard; // the computation binds its own framebuffers, programs, and textures
+		Gl_State_Guard guard{ implementation->timings.guard_ms }; // the computation binds its own framebuffers, programs, and textures
 
 		if (!implementation->renderer.isReady())
 		{
 			return "The X-ray renderer is not ready (it needs a valid detector, beam, and shaders, and at least one mesh)";
 		}
 
+		// the commands of the GPU are asynchronous: they are finished before the clock stops, so that the read-back below is only the copy
+		const auto computation_start = std::chrono::steady_clock::now();
 		implementation->renderer.computeImage(gVirtualXRay::MATRIX4{}, true);
+		glFinish();
+		implementation->timings.computation_ms = get_milliseconds_since(computation_start);
 
-		image.width  = implementation->width;
-		image.height = implementation->height;
+		const auto read_back_start = std::chrono::steady_clock::now();
+		image.width                = implementation->width;
+		image.height               = implementation->height;
 		image.pixels.assign(static_cast<std::size_t>(image.width) * image.height, 0.0f);
 		implementation->renderer.getFBO(XRAY_DETECTOR_ENERGY_FLUENCE_FBO_ID, image.pixels.data(), image.width, image.height);
+		implementation->timings.read_back_ms = get_milliseconds_since(read_back_start);
 	}
 	catch (...)
 	{
@@ -424,4 +466,9 @@ std::string Gvxr_Adapter::compute_image(Xray_Image& image)
 bool Gvxr_Adapter::get_is_initialised() const
 {
 	return implementation->is_initialised;
+}
+
+const Xray_Timings& Gvxr_Adapter::get_timings() const
+{
+	return implementation->timings;
 }
