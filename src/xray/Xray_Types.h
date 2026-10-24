@@ -48,6 +48,21 @@ struct Xray_Detector
 	double                pixel_size{ 2.0 }; // side of a pixel, in millimetres
 };
 
+// Times that the adapter spent in its calls, in milliseconds. The times of the guard, of the initialisation, and of the meshes are
+// added up since the adapter was created, so for an adapter that is created for each image they are the cost of that image. The
+// times of the computation and of the read-back are the ones of the last image
+struct Xray_Timings
+{
+	double guard_ms{ 0.0 }; // saving, setting, and restoring the state of OpenGL in all the calls (it is not part of the last two times)
+	double initialise_ms{ 0.0 };          // the whole initialise call
+	double glew_ms{ 0.0 };                // loading the OpenGL functions of the library (part of the initialisation)
+	double renderer_initialise_ms{ 0.0 }; // the initialisation of the renderer: shaders, framebuffers, and textures (part of it too)
+	double add_meshes_ms{ 0.0 };          // all the add_mesh calls
+	unsigned int mesh_count{ 0 };         // the meshes that were added
+	double       computation_ms{ 0.0 };   // the computation of the last image, until the GPU has finished
+	double       read_back_ms{ 0.0 };     // the copy of the last image from the GPU to the memory
+};
+
 // X-ray image: the energy fluence of each pixel, row by row (the first row is the bottom of the detector)
 struct Xray_Image
 {

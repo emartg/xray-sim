@@ -25,6 +25,16 @@ namespace
 		return static_cast<ImTextureID>(texture);
 	}
 
+	// The images that are counted are the ones of the last seconds (an image takes more than a second, so a shorter period would count
+	// none)
+	constexpr int IMAGE_COUNT_SECONDS{ 5 };
+
+	// Milliseconds since the time point
+	double get_milliseconds_since(std::chrono::steady_clock::time_point start)
+	{
+		return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	}
+
 	// Rectangle of the given aspect ratio (width over height) that fits in the area, centred in it
 	void fit_in_area(const ImVec2& area, float aspect_ratio, ImVec2& offset, ImVec2& size)
 	{
@@ -82,14 +92,22 @@ void Xray_View::apply_setup()
 	error.clear();
 	is_setup_dirty = false;
 
+	const auto apply_start = std::chrono::steady_clock::now();
+
 	// the old adapter is destroyed first: the library keeps one graphics context, which the new adapter registers
 	adapter.reset();
-	auto new_adapter = std::make_unique<Gvxr_Adapter>();
+	adapter_reset_ms        = get_milliseconds_since(apply_start);
+	const auto create_start = std::chrono::steady_clock::now();
+	auto       new_adapter  = std::make_unique<Gvxr_Adapter>();
+	adapter_create_ms       = get_milliseconds_since(create_start);
 
 	error = new_adapter->initialise(setup.make_beam(), setup.make_detector());
 	if (error.empty())
 	{ // the meshes are uploaded in millimetres, with the transform of each object applied
-		for (const Xray_Mesh& mesh : scene->make_xray_meshes())
+		const auto                   scene_start = std::chrono::steady_clock::now();
+		const std::vector<Xray_Mesh> meshes      = scene->make_xray_meshes();
+		scene_ms                                 = get_milliseconds_since(scene_start);
+		for (const Xray_Mesh& mesh : meshes)
 		{
 			error = new_adapter->add_mesh(mesh);
 			if (!error.empty())
@@ -107,6 +125,18 @@ void Xray_View::apply_setup()
 		return;
 	}
 	compute();
+
+	apply_ms = get_milliseconds_since(apply_start);
+	if (!error.empty())
+		return;
+	image_times.push_back(std::chrono::steady_clock::now());
+	std::cout << "[INFO::XRAY_VIEW::apply_setup] " << image.width << " by " << image.height << " pixels, " << timings.mesh_count
+			  << " meshes: total " << apply_ms << " ms; destroy the adapter " << adapter_reset_ms << ", create the adapter "
+			  << adapter_create_ms << ", initialise " << timings.initialise_ms << " (GLEW " << timings.glew_ms << ", renderer "
+			  << timings.renderer_initialise_ms << ") + scene " << scene_ms << ", add meshes " << timings.add_meshes_ms << ", compute call "
+			  << compute_time_ms << " (computation " << timings.computation_ms << ", read-back " << timings.read_back_ms << "), mirror "
+			  << mirror_ms << "; state guard " << timings.guard_ms << " ms in all the calls; images in the last " << IMAGE_COUNT_SECONDS
+			  << " seconds: " << get_images_in_last_seconds() << std::endl;
 }
 
 void Xray_View::compute()
@@ -116,7 +146,8 @@ void Xray_View::compute()
 
 	const auto start = std::chrono::steady_clock::now();
 	error            = adapter->compute_image(image);
-	compute_time_ms  = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+	compute_time_ms  = get_milliseconds_since(start);
+	timings          = adapter->get_timings();
 
 	if (!error.empty())
 	{
@@ -136,6 +167,7 @@ void Xray_View::compute()
 
 	// the library numbers the columns as seen from the source, looking along +z, where +x is on the left. The image is mirrored so
 	// that it is seen from the detector, looking along -z, as the 3D camera of the scene looks: +x is on the right and +y is up
+	const auto mirror_start = std::chrono::steady_clock::now();
 	for (unsigned int row = 0; row < image.height; ++row)
 	{
 		const auto first = image.pixels.begin() + static_cast<std::ptrdiff_t>(row) * image.width;
@@ -143,6 +175,7 @@ void Xray_View::compute()
 	}
 
 	reference        = Xray_Display::find_reference_value(image);
+	mirror_ms        = get_milliseconds_since(mirror_start);
 	is_texture_dirty = true;
 	std::cout << "[INFO::XRAY_VIEW::compute] X-ray image of " << image.width << " by " << image.height << " pixels computed in "
 			  << compute_time_ms << " ms" << std::endl;
@@ -159,6 +192,7 @@ void Xray_View::update_texture()
 		texture = 0;
 	}
 
+	const auto creation_start = std::chrono::steady_clock::now();
 	if (texture == 0)
 	{ // one byte per pixel, shown as grey (the red channel is copied to the three colour channels)
 		texture_width  = image.width;
@@ -173,10 +207,15 @@ void Xray_View::update_texture()
 		glTextureParameteriv(texture, GL_TEXTURE_SWIZZLE_RGBA, swizzle);
 	}
 
-	const std::vector<std::uint8_t> grey = Xray_Display::convert_to_grey(image, reference, display_settings);
+	const double creation_ms = get_milliseconds_since(creation_start);
+
+	const auto                      grey_start = std::chrono::steady_clock::now();
+	const std::vector<std::uint8_t> grey       = Xray_Display::convert_to_grey(image, reference, display_settings);
+	grey_ms                                    = get_milliseconds_since(grey_start);
 
 	// the rows are tightly packed (one byte per pixel), whatever the width
-	GLint alignment{ 4 };
+	const auto copy_start = std::chrono::steady_clock::now();
+	GLint      alignment{ 4 };
 	glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
 	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 	glTextureSubImage2D(
@@ -191,7 +230,23 @@ void Xray_View::update_texture()
 		grey.data());
 	glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
 
+	// the driver may finish the transfer to the GPU later, so this is the time that the application waits
+	upload_ms        = creation_ms + get_milliseconds_since(copy_start);
 	is_texture_dirty = false;
+	std::cout << "[INFO::XRAY_VIEW::update_texture] grey conversion " << grey_ms << " ms, texture upload " << upload_ms << " ms"
+			  << std::endl;
+}
+
+unsigned int Xray_View::get_images_in_last_seconds()
+{
+	const auto now = std::chrono::steady_clock::now();
+	std::erase_if(image_times, [now](std::chrono::steady_clock::time_point time) {
+		return now - time > std::chrono::seconds{ IMAGE_COUNT_SECONDS };
+	});
+
+	const auto count            = static_cast<unsigned int>(image_times.size());
+	most_images_in_last_seconds = std::max(most_images_in_last_seconds, count);
+	return count;
 }
 
 void Xray_View::draw_setup_window()
@@ -199,7 +254,7 @@ void Xray_View::draw_setup_window()
 	// the window is under the X-ray window, at the right of the 3D view
 	const ImVec2 display = ImGui::GetIO().DisplaySize;
 	ImGui::SetNextWindowPos(ImVec2{ std::max(display.x - 580.0f, 0.0f), 410.0f }, ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2{ 560.0f, 250.0f }, ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2{ 560.0f, 360.0f }, ImGuiCond_FirstUseEver);
 	ImGui::Begin("X-ray setup");
 
 	// the values are clamped by the sliders (also when a value is typed), so that they are always valid
@@ -261,6 +316,36 @@ void Xray_View::draw_setup_window()
 		is_setup_dirty = true;
 	if (is_setup_dirty && (is_auto_recompute || is_apply_pressed))
 		apply_setup();
+
+	// the times of the last image, in milliseconds
+	ImGui::Separator();
+	if (is_image_valid)
+	{
+		ImGui::Text("Last image: %.1f ms in all, %u meshes", apply_ms, timings.mesh_count);
+		ImGui::Text(
+			"Destroy %.1f, create %.1f, initialise %.1f (GLEW %.1f, renderer %.1f), scene %.1f, add meshes %.1f",
+			adapter_reset_ms,
+			adapter_create_ms,
+			timings.initialise_ms,
+			timings.glew_ms,
+			timings.renderer_initialise_ms,
+			scene_ms,
+			timings.add_meshes_ms);
+		ImGui::Text(
+			"Computation %.1f, read-back %.1f, mirror %.1f, grey %.1f, texture %.1f",
+			timings.computation_ms,
+			timings.read_back_ms,
+			mirror_ms,
+			grey_ms,
+			upload_ms);
+		ImGui::Text("Compute call %.1f, state guard %.1f in all the calls", compute_time_ms, timings.guard_ms);
+	}
+	ImGui::Text(
+		"Images computed in the last %d seconds: %u (most: %u), frames per second: %.0f",
+		IMAGE_COUNT_SECONDS,
+		get_images_in_last_seconds(),
+		most_images_in_last_seconds,
+		ImGui::GetIO().Framerate);
 
 	ImGui::End();
 }

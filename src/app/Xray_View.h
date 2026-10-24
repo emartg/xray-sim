@@ -11,8 +11,10 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "display/Xray_Display.h"
 #include "scene/Scene.h"
@@ -52,7 +54,8 @@ private:
 	// ---------------
 	// Puts the setup within its limits, creates the adapter again with the beam and the detector of the setup and the meshes of the
 	// scene, and computes the image. The adapter is created again because the library takes its beam and its detector when it is
-	// initialised. Sets the error on failure (and clears it first, so that the user can try again)
+	// initialised. Sets the error on failure (and clears it first, so that the user can try again). Measures the time of each stage,
+	// prints it, and counts the images (see get_images_in_last_seconds)
 	void apply_setup();
 
 	// Computes the X-ray image of the scene with the adapter, and measures the time it takes. Sets the error on failure
@@ -62,8 +65,12 @@ private:
 	// and again if the image has another size)
 	void update_texture();
 
-	// Draws the controls of the setup. The changes are applied when they are made, or with the button if the option is off
+	// Draws the controls of the setup and the times of the last image. The changes are applied when they are made, or with the button
+	// if the option is off
 	void draw_setup_window();
+
+	// Returns how many images apply_setup computed in the last few seconds, and keeps the highest number
+	unsigned int get_images_in_last_seconds();
 
 	// Draws the controls of the display, the status, and the image (if it is not the single view) in the "X-ray" window
 	void draw_window();
@@ -97,6 +104,19 @@ private:
 	Xray_Setup image_setup;               // the values of the current image
 	bool       is_auto_recompute{ true }; // true: the image is computed again whenever a value of the setup changes
 	bool       is_setup_dirty{ false };   // true: a value of the setup changed and is not applied yet
+
+	// Times of the last image, in milliseconds (the ones of the adapter are in timings)
+	Xray_Timings timings;
+	double       apply_ms{ 0.0 };          // the whole apply_setup
+	double       adapter_reset_ms{ 0.0 };  // the destruction of the old adapter
+	double       adapter_create_ms{ 0.0 }; // the construction of the new adapter (the objects of the library, before initialise)
+	double       scene_ms{ 0.0 };          // the meshes of the scene in the units of the library
+	double       mirror_ms{ 0.0 };         // the mirror of the image and the search of the reference value
+	double       grey_ms{ 0.0 };           // the conversion to grey values
+	double       upload_ms{ 0.0 };         // the creation of the texture, if it is new, and the copy of the grey values to it
+
+	std::vector<std::chrono::steady_clock::time_point> image_times; // when the images of the last few seconds were computed
+	unsigned int                                       most_images_in_last_seconds{ 0 };
 
 	Xray_Image            image;
 	float                 reference{ 0.0f }; // value of the unattenuated beam in the image
