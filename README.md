@@ -34,4 +34,4 @@ The simulator is built and tested on Linux (GCC and Clang) and on Windows (MinGW
 
 ## Assets and Credits
 
-The third-party libraries and resources of the simulator are credited, with their authors, sources, and licenses, in [docs/sources.md](docs/sources.md). The engine and the gVirtualXRay fork have their own files: [engine/docs/sources.md](engine/docs/sources.md) and [gvirtual-xray/doc/SOURCES.md](gvirtual-xray/doc/SOURCES.md).
+The third-party libraries and resources of the simulator are credited, with their authors, sources, and licenses, in [docs/sources.md](docs/sources.md). The engine and the gVirtualXRay fork have their own files: [engine/docs/sources.md](engine/docs/sources.md) and [gvirtual-xray/docs/sources.md](gvirtual-xray/docs/sources.md).
