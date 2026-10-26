@@ -34,3 +34,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - The Windows jobs of the CI use their vcpkg binary cache when GitHub moves a job to another build of the runner image: the CI triplets leave the compiler out of the ABI hash of the packages.
 - The Windows jobs of the CI ran only some of the unit tests: they also run `Xray_Setup_Test`, `Xray_Display_Test`, and `Submodule_Pin_Guard_Test` now.
+- The messages of the command-line check of `main.cpp` have the tag of the Engine's format (`[ERROR::MAIN::parse_command_line]`): a free function uses the name of its file in capitals as the class part.
