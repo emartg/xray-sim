@@ -42,7 +42,7 @@ bool parse_command_line(int argc, char** argv, std::uint64_t& max_frames, bool& 
 			(argument == "--xray-self-test" ? xray_self_test : xray_view_test) = true;
 			continue;
 #else
-			std::cerr << "[ERROR::main::parse_command_line] This build of the simulator has no X-ray part (" << argument << ")"
+			std::cerr << "[ERROR::MAIN::parse_command_line] This build of the simulator has no X-ray part (" << argument << ")"
 					  << std::endl;
 			return false;
 #endif
@@ -50,13 +50,13 @@ bool parse_command_line(int argc, char** argv, std::uint64_t& max_frames, bool& 
 
 		if (argument != "--frames")
 		{ // if the argument is unknown, print an error message and return false
-			std::cerr << "[ERROR::main::parse_command_line] Unknown argument: " << argument << std::endl;
+			std::cerr << "[ERROR::MAIN::parse_command_line] Unknown argument: " << argument << std::endl;
 			return false;
 		}
 
 		if (i + 1 >= argc)
 		{ // if there is no next argument, print an error message and return false
-			std::cerr << "[ERROR::main::parse_command_line] Missing value for --frames" << std::endl;
+			std::cerr << "[ERROR::MAIN::parse_command_line] Missing value for --frames" << std::endl;
 			return false;
 		}
 
@@ -65,7 +65,7 @@ bool parse_command_line(int argc, char** argv, std::uint64_t& max_frames, bool& 
 		auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), max_frames);
 		if (error != std::errc{} || end != value.data() + value.size() || max_frames == 0)
 		{ // if the value is not a positive integer, print an error message and return false
-			std::cerr << "[ERROR::main::parse_command_line] Invalid number of frames: '" << value << "' (expected a positive integer)"
+			std::cerr << "[ERROR::MAIN::parse_command_line] Invalid number of frames: '" << value << "' (expected a positive integer)"
 					  << std::endl;
 			return false;
 		}
