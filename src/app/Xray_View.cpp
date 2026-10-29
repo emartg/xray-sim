@@ -47,7 +47,10 @@ namespace
 
 // Constructors
 // ------------
-Xray_View::Xray_View(std::shared_ptr<const Scene> scene, bool should_check) : scene{ std::move(scene) }, is_check_requested{ should_check }
+Xray_View::Xray_View(std::shared_ptr<const Scene> scene, bool should_check) :
+	scene{ std::move(scene) },
+	is_check_requested{ should_check },
+	is_console_output_enabled{ should_check }
 {}
 
 // Destructor
@@ -130,6 +133,8 @@ void Xray_View::apply_setup()
 	if (!error.empty())
 		return;
 	image_times.push_back(std::chrono::steady_clock::now());
+	if (!is_console_output_enabled)
+		return;
 	std::cout << "[INFO::XRAY_VIEW::apply_setup] " << image.width << " by " << image.height << " pixels, " << timings.mesh_count
 			  << " meshes: total " << apply_ms << " ms; destroy the adapter " << adapter_reset_ms << ", create the adapter "
 			  << adapter_create_ms << ", initialise " << timings.initialise_ms << " (GLEW " << timings.glew_ms << ", renderer "
@@ -177,8 +182,11 @@ void Xray_View::compute()
 	reference        = Xray_Display::find_reference_value(image);
 	mirror_ms        = get_milliseconds_since(mirror_start);
 	is_texture_dirty = true;
-	std::cout << "[INFO::XRAY_VIEW::compute] X-ray image of " << image.width << " by " << image.height << " pixels computed in "
-			  << compute_time_ms << " ms" << std::endl;
+	if (is_console_output_enabled)
+	{
+		std::cout << "[INFO::XRAY_VIEW::compute] X-ray image of " << image.width << " by " << image.height << " pixels computed in "
+				  << compute_time_ms << " ms" << std::endl;
+	}
 }
 
 void Xray_View::update_texture()
@@ -233,8 +241,11 @@ void Xray_View::update_texture()
 	// the driver may finish the transfer to the GPU later, so this is the time that the application waits
 	upload_ms        = creation_ms + get_milliseconds_since(copy_start);
 	is_texture_dirty = false;
-	std::cout << "[INFO::XRAY_VIEW::update_texture] grey conversion " << grey_ms << " ms, texture upload " << upload_ms << " ms"
-			  << std::endl;
+	if (is_console_output_enabled)
+	{
+		std::cout << "[INFO::XRAY_VIEW::update_texture] grey conversion " << grey_ms << " ms, texture upload " << upload_ms << " ms"
+				  << std::endl;
+	}
 }
 
 unsigned int Xray_View::get_images_in_last_seconds()
@@ -296,7 +307,8 @@ void Xray_View::draw_setup_window()
 		is_changed             = true;
 	}
 
-	ImGui::Text(
+	// the texts wrap at the right edge of the window, whatever its size
+	ImGui::TextWrapped(
 		"Magnification %.2f, detector %.0f x %.0f mm",
 		setup.get_magnification(),
 		setup.width_in_pixels * setup.pixel_size,
@@ -311,6 +323,7 @@ void Xray_View::draw_setup_window()
 		setup      = Xray_Setup{};
 		is_changed = true;
 	}
+	ImGui::Checkbox("Print the times to the console", &is_console_output_enabled);
 
 	if (is_changed)
 		is_setup_dirty = true;
@@ -321,8 +334,8 @@ void Xray_View::draw_setup_window()
 	ImGui::Separator();
 	if (is_image_valid)
 	{
-		ImGui::Text("Last image: %.1f ms in all, %u meshes", apply_ms, timings.mesh_count);
-		ImGui::Text(
+		ImGui::TextWrapped("Last image: %.1f ms in all, %u meshes", apply_ms, timings.mesh_count);
+		ImGui::TextWrapped(
 			"Destroy %.1f, create %.1f, initialise %.1f (GLEW %.1f, renderer %.1f), scene %.1f, add meshes %.1f",
 			adapter_reset_ms,
 			adapter_create_ms,
@@ -331,16 +344,16 @@ void Xray_View::draw_setup_window()
 			timings.renderer_initialise_ms,
 			scene_ms,
 			timings.add_meshes_ms);
-		ImGui::Text(
+		ImGui::TextWrapped(
 			"Computation %.1f, read-back %.1f, mirror %.1f, grey %.1f, texture %.1f",
 			timings.computation_ms,
 			timings.read_back_ms,
 			mirror_ms,
 			grey_ms,
 			upload_ms);
-		ImGui::Text("Compute call %.1f, state guard %.1f in all the calls", compute_time_ms, timings.guard_ms);
+		ImGui::TextWrapped("Compute call %.1f, state guard %.1f in all the calls", compute_time_ms, timings.guard_ms);
 	}
-	ImGui::Text(
+	ImGui::TextWrapped(
 		"Images computed in the last %d seconds: %u (most: %u), frames per second: %.0f",
 		IMAGE_COUNT_SECONDS,
 		get_images_in_last_seconds(),
@@ -382,11 +395,14 @@ void Xray_View::draw_window()
 
 	if (!error.empty())
 	{
+		// the text wraps at the right edge of the window (a wrap position of 0 is the edge of the content region)
+		ImGui::PushTextWrapPos(0.0f);
 		ImGui::TextColored(ImVec4{ 1.0f, 0.4f, 0.4f, 1.0f }, "Error: %s", error.c_str());
+		ImGui::PopTextWrapPos();
 	}
 	else if (is_image_valid)
 	{
-		ImGui::Text(
+		ImGui::TextWrapped(
 			"%u x %u pixels of %.1f mm, %.0f keV, computed in %.0f ms",
 			image.width,
 			image.height,
@@ -407,7 +423,7 @@ void Xray_View::draw_window()
 	}
 	else if (texture != 0)
 	{
-		ImGui::TextUnformatted("The image is shown behind the windows.");
+		ImGui::TextWrapped("The image is shown behind the windows.");
 	}
 
 	ImGui::End();

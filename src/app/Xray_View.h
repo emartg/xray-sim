@@ -30,7 +30,8 @@ public:
 	// ------------
 	// The scene is the one that the image shows. If should_check is true, the first image is checked, and then the setup is changed
 	// to check that the changes take effect (see check_image); the results are printed with the format of the Engine
-	// ("[SUCCESS::..." or "[ERROR::...")
+	// ("[SUCCESS::..." or "[ERROR::..."). The times of each image are printed to the console only if the user turns the option on
+	// in the setup window, or if the first image is checked (should_check)
 	explicit Xray_View(std::shared_ptr<const Scene> scene, bool should_check = false);
 	Xray_View(const Xray_View&) = delete; // copy constructor (the view owns an OpenGL texture and the adapter)
 
@@ -99,6 +100,7 @@ private:
 	std::unique_ptr<Gvxr_Adapter> adapter;
 	std::string                   error; // the reason the adapter or the image failed; empty if there is none
 	bool                          is_check_requested{ false };
+	bool is_console_output_enabled{ false }; // true: every image prints its times to the console (the user's option, and the check's)
 
 	Xray_Setup setup;                     // the values that the user chooses
 	Xray_Setup image_setup;               // the values of the current image
