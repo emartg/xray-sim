@@ -135,7 +135,7 @@ void Simulator_Gui::draw()
 	ImGui::SetNextWindowPos(ImVec2{ 20.0f, 20.0f });
 	ImGui::SetNextWindowSize(ImVec2{ 360.0f, 80.0f });
 	ImGui::Begin("XRSim");
-	ImGui::TextUnformatted("Projectional radiography simulator");
+	ImGui::TextWrapped("Projectional radiography simulator"); // wraps at the edge of the window, whatever its size
 	ImGui::End();
 
 	// the objects of the scene: the name, the shape, the material, and the position in centimetres
