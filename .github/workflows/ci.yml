@@ -140,14 +140,22 @@ jobs:
           Get-Command gcc, g++, x86_64-w64-mingw32-gcc, mingw32-make | Format-Table Name, Source -AutoSize
           gcc --version
 
-      - name: Identify the compiler version
-        # part of the key of the vcpkg binary cache, so that packages built by another compiler version are not reused
+      - name: Identify the compiler and tool versions
+        # part of the key of the vcpkg binary cache, so that packages built by another compiler version are not reused. The
+        # hash that vcpkg computes for every package also has the versions of CMake and PowerShell of the runner image (the
+        # entries cmake|<version> and powershell|<version>): if an image update changed one of them and not the compiler, the
+        # key would be the same, the restore would be an exact hit with archives of the old hash, vcpkg would build everything,
+        # and the save would be skipped, so the runs would stay cold until the key changed
         id: compiler
         shell: pwsh
         run: |
           if ("${{ matrix.toolchain }}" -eq "msvc") { $version = "msvc-$env:VCToolsVersion" } else { $version = "gcc-$(gcc -dumpfullversion)" }
           Write-Output "Compiler: $version"
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $cmakeVersion = ((cmake --version | Select-Object -First 1) -split " ")[-1]
+          $tools = "cmake-$cmakeVersion-pwsh-$($PSVersionTable.PSVersion)"
+          Write-Output "Tools: $tools"
+          "tools=$tools" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Set up vcpkg at the baseline of the manifest
         # after the MSVC developer environment, which may set VCPKG_ROOT to the vcpkg instance of Visual Studio
@@ -167,16 +175,44 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: ${{ runner.temp }}\vcpkg-binary-cache
-          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg_triplets/*.cmake') }}
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ steps.compiler.outputs.tools }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg_triplets/*.cmake') }}
           restore-keys: |
-            vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-
+            vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ steps.compiler.outputs.tools }}-
 
       - name: Configure
         # vcpkg installs the dependencies of the manifest during the configuration (from the cache when available).
-        # The triplet is the CI one, for the target and for the host: it leaves the compiler out of the ABI hash of the
-        # packages, because the runner images change the build of the compiler (Visual Studio 18.10.2 and 18.10.3 have the
-        # same toolset) and the binary cache was never used, so every package was built again (11 minutes with MSVC)
-        run: cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} -DVCPKG_HOST_TRIPLET=${{ matrix.triplet }}
+        # The target triplet is the CI one, and the host triplet is x64-windows-ci: both leave the compiler out of the ABI
+        # hash of the packages, because the runner images change the build of the compiler (Visual Studio 18.10.2 and 18.10.3
+        # have the same toolset) and the tools of vcpkg, which every package depends on, are built with cl.exe; and the PATH
+        # is not part of the hash (see cmake/vcpkg_triplets). A compiler upgrade does not rebuild a package in the CI: the key
+        # of the cache has the version of the compiler. The debug output of vcpkg (the entries of the hash) goes to a file that
+        # the next step summarizes
+        shell: pwsh
+        run: |
+          cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON "-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}" "-DVCPKG_HOST_TRIPLET=x64-windows-ci" "-DVCPKG_INSTALL_OPTIONS=--debug" *> "$env:RUNNER_TEMP\configure.log"
+          $code = $LASTEXITCODE
+          if ($code -ne 0) { Get-Content "$env:RUNNER_TEMP\configure.log" -Tail 200 }
+          exit $code
+
+      - name: Summarize the vcpkg binary cache
+        # how many packages were restored, and the entries of the hash of a small port and of a tool of vcpkg: when the cache
+        # does not restore, the entry that differs between two runs is the cause
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          $log = Get-Content "$env:RUNNER_TEMP\configure.log" -ErrorAction SilentlyContinue
+          $restored = $log | Select-String "Restored \d+ package" | Select-Object -First 1
+          $summary = @("### vcpkg binary cache (${{ matrix.preset }})", "")
+          $summary += $(if ($restored) { $restored.Line } else { "no restore line in the output" })
+          foreach ($port in "zlib", "vcpkg-cmake") {
+            $start = ($log | Select-String -Pattern "abientries for ${port}:" | Select-Object -First 1).LineNumber
+            if ($start) {
+              $block = @(); for ($i = $start - 1; $i -lt $log.Count; $i++) { $block += ($log[$i] -replace "^\[DEBUG\] ?", ""); if ($log[$i] -match "</abientries>") { break } }
+              $summary += @("", "~~~", $block, "~~~")
+            }
+          }
+          $summary | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $summary | Select-Object -First 3
 
       - name: Save the vcpkg binary cache
         # saved even if a later step fails, so that the dependencies are not built again on the next run
@@ -184,7 +220,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: ${{ runner.temp }}\vcpkg-binary-cache
-          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg_triplets/*.cmake') }}
+          key: vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ steps.compiler.outputs.tools }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg_triplets/*.cmake') }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel
