@@ -30,7 +30,7 @@ CMake stops with a message if the engine, or gVirtualXRay when the X-ray part is
 
 ## The Submodules Must Be at the Recorded Commits
 
-The repository records one commit for each submodule (the pin), but the build uses the contents of the folders `engine/` and `gvirtual-xray/`, whatever commit is checked out in them. So that what is built is what the repository says, CMake compares, when it configures, the commit checked out in each folder (gVirtualXRay only when the X-ray part is on) with the one that the index of the repository records for it (`git ls-files -s <folder>`), and stops with a message that names the folder, both commits, and the two ways out if they differ:
+The repository records one commit for each submodule (the pin), but the build uses the contents of the folders `engine/` and `gvirtual-xray/`, whatever commit is checked out in them. So that what is built is what the repository says, CMake compares, when it configures, the commit checked out in each folder (gVirtualXRay only when the X-ray part is on) with the one that the index of the repository records for it (`git ls-files -s <folder>`), and stops with a message that names the folder, both commits, and the two ways out if they differ (the message is expected whenever a folder is on one of its branches because you work on it; the way out 1 also says how to put the folder back on its branch afterwards; see Troubleshooting):
 
 - Go back to the recorded commit: `git submodule update engine` (commit or discard the work in the folder first: Git refuses to overwrite it).
 - Move the pin on purpose: `git add engine` and commit it. The index is compared, not the last commit, so a new pin can be tried after `git add` and before the commit.
@@ -83,7 +83,7 @@ The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). The first th
 - `XRSim_Invalid_Argument_Test` checks that an invalid argument is rejected. It needs no display.
 - `XRSim_Xray_Self_Test` (only with the X-ray part) runs `XRSim --frames 3 --xray-self-test`: in the first frame, on the OpenGL context of the Engine's window, it computes the X-ray image of a cube of water of 10 cm with a beam of 80 keV, and checks that the cube transmits the beam as the Beer-Lambert law predicts (within 3 percent), and that the state of OpenGL is the same before and after the computation. It needs an OpenGL 4.5 display, like the smoke test.
 - `XRSim_Xray_View_Test` (only with the X-ray part) runs `XRSim --frames 3 --xray-view-test`: in the first frame the simulator computes the X-ray image of the default scene, and checks that the corners of the image are not attenuated, that the beam is attenuated where the centre of each object projects on the detector, and that the iron sphere attenuates more than the water sphere; then it changes the setup (a lower energy must attenuate more, and another geometry and detector must give a valid image of the new size) and goes back to the first setup. It needs an OpenGL 4.5 display too. The smoke test shows the image as well, without checking it.
-- `Submodule_Pin_Guard_Test` (label `unit`) checks the pin guard with small Git repositories that it creates in the build directory: the folder at the recorded commit passes; at another commit the configuration stops with the message that names the folder, both commits, and the two ways out; the option turns the stop into a warning; a new pin in the index passes; and the check is skipped without Git, without a Git checkout, with a folder that was not fetched, and with no commit recorded. It needs Git (it is skipped without it) and no display.
+- `Submodule_Pin_Guard_Test` (label `unit`) checks the pin guard with small Git repositories that it creates in the build directory: the folder at the recorded commit passes; at another commit the configuration stops with the message that names the folder, both commits, how to go back to the branch afterwards, and the two ways out; the option turns the stop into a warning; a new pin in the index passes; and the check is skipped without Git, without a Git checkout, with a folder that was not fetched, and with no commit recorded. It needs Git (it is skipped without it) and no display.
 - `Scene_Test` (label `unit`) checks the scene library without an OpenGL context: the shapes (closed surfaces, outward triangles, and the volume that each one should enclose), the table of materials, and that the default scene gives X-ray meshes in millimetres with the transform of each object applied.
 - `Xray_Setup_Test` (label `unit`) checks the setup of the source and the detector (the default values, the conversion from centimetres to the millimetres of the library, the magnification, and the limits of every value) without an OpenGL context.
 - `Xray_Display_Test` (label `unit`) checks the conversion of an X-ray image to grey values (the reference, the transmission, the linear and logarithmic scales, and the negative), without an OpenGL context.
@@ -110,3 +110,64 @@ The workflow `.github/workflows/ci.yml` runs on every push to `main` and on ever
 - **Format:** the clang-format check above.
 - **Linux:** the `ninja-gcc-debug` and `ninja-clang-release` presets, with the system packages; it builds and runs the tests under a virtual display (Xvfb) with Mesa's software OpenGL 4.5 renderer.
 - **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache, with the triplets `x64-windows-xray-ci` and `x64-mingw-dynamic-xray-ci` of `cmake/vcpkg_triplets`, which leave the compiler out of the ABI hash of the packages so that a new build of the compiler in the runner image does not discard the cache, and the host triplet `x64-windows-ci`, which does the same for the tools that vcpkg builds for itself; a compiler upgrade does not rebuild a package in the CI, because the key of the cache has the versions of the compiler, of CMake, and of PowerShell (the hash of every package has them); the summary of each job shows how many packages vcpkg restored and the entries of the hash of `zlib` and `vcpkg-cmake`: if the cache does not restore, the entry that differs between two runs is the cause); it builds and runs only the tests that need no display (the invalid argument test, the unit tests of the scene, the setup, the display, and the pin guard, and the adapter test where the X-ray part is built, which is not the case with MSVC for now), since the runners do not support OpenGL 4.5.
+
+## Troubleshooting
+
+### The pin guard stops the configuration
+
+CMake stops with `The folder 'engine' is not at the commit that this repository records for it` (or `'gvirtual-xray'`). The folder is checked out at another commit than the one that the repository records, most often because it is on its own `main` while you work on it, and the build uses the contents of the folder, not the recorded commit. The message is expected in that case. From the root of the repository, in PowerShell, put the folders at the recorded commits (taken from Git, not from a hash written in a text), delete the build folder, and configure again:
+
+```powershell
+git -C engine status --short
+git -C gvirtual-xray status --short
+git -C engine switch --detach (git rev-parse :engine)
+git -C gvirtual-xray switch --detach (git rev-parse :gvirtual-xray)
+git submodule status
+```
+
+The first two commands must print nothing (otherwise commit or stash the work in that folder first: Git refuses to switch over it), and `git submodule status` must show no `+` at the start of a line. Build, test, and run while the folders are detached: the program reads the shaders and the resources of the Engine from `engine/` every time it runs, so an Engine at another commit crashes it at start-up. Afterwards put the folders back on their branches:
+
+```powershell
+git -C engine switch main
+git -C engine pull
+git -C gvirtual-xray switch main
+git -C gvirtual-xray pull
+```
+
+`-DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON` turns the stop into a warning, but then what is built is not the version that the repository says it builds (an Engine that is ahead of the pinned release also needs `nlohmann_json`, which `vcpkg.json` does not list), so use it only to try another version on purpose.
+
+### `Restored 0 package(s)`: the first configure builds every package
+
+The first configuration of each preset builds the dependencies with vcpkg (10 to 20 minutes) and stores them in its binary cache (`%LOCALAPPDATA%\vcpkg\archives`); later configurations, also in new build folders and with other presets of the same triplet, restore them in seconds (`Restored 39 package(s)`). If a later configuration says `Restored 0 package(s)` and builds everything again, the hash (ABI) of the packages changed. With MinGW the cause was the `PATH`, which the triplet of vcpkg puts in the hash (another terminal, VS Code, or a runner has another `PATH`); the MinGW triplet of this repository leaves it out, and the first configuration after updating builds the packages once more. With MSVC and in the CI the other cause was the compiler hash of the tools that vcpkg builds for itself, which the CI triplets leave out (see Continuous Integration). A compiler upgrade also builds the packages again on a developer's machine, on purpose. To find another cause, configure twice with `-DVCPKG_INSTALL_OPTIONS=--debug`, copy the lines between `<abientries for zlib:` and `</abientries>` of each run, and compare them: the entry that differs is what changed.
+
+### vcpkg waits for a filesystem lock, or the installed folder is inconsistent
+
+Two vcpkg runs on the same vcpkg folder (two terminals, or VS Code and a terminal) wait for each other's lock (`buildtrees\vcpkg-running.lock` in `VCPKG_ROOT`): wait for the first one, or stop it. A run that was interrupted can leave the installed folder of the build inconsistent (packages missing or half installed): delete `out\build\<preset>\vcpkg_installed` and configure again; the packages come back from the binary cache.
+
+### A build folder holds the tools of another compiler
+
+A build folder that was configured with one compiler and is configured again with another keeps the tools in its `CMakeCache.txt`: for example MinGW's `ld.exe` and `ar.exe` under MSVC, which fails with `unrecognised emulation mode`. Delete `CMakeCache.txt` and the folder `CMakeFiles` of that build folder (or the whole folder) and configure again, or add `--fresh` to the configuration command.
+
+### `cl` is not found
+
+The Ninja presets with MSVC (`ninja-msvc-debug`, `ninja-msvc-release`) need a Visual Studio developer shell: `cl` is not in the `PATH` of a plain PowerShell. The Visual Studio presets (`vs2022-msvc-debug`, `vs2026-msvc-debug`) do not need it. From any PowerShell, enter an x64 developer shell, restore `VCPKG_ROOT` (see the next entry), and check the compiler before configuring:
+
+```powershell
+$vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+$env:VCPKG_ROOT = [Environment]::GetEnvironmentVariable("VCPKG_ROOT", "User")
+Get-Command cl
+```
+
+### `VCPKG_ROOT` points to Visual Studio's own vcpkg
+
+The Visual Studio developer shell sets `VCPKG_ROOT` to the vcpkg that comes with Visual Studio, which failed to build the packages of this repository. Use your own clone of vcpkg (one that contains the `builtin-baseline` commit of `vcpkg.json`): set `VCPKG_ROOT` as a user environment variable, and in a developer shell restore it after entering the shell (`$env:VCPKG_ROOT = [Environment]::GetEnvironmentVariable("VCPKG_ROOT", "User")`). Check it with `$env:VCPKG_ROOT` before configuring.
+
+### The configuration of gVirtualXRay stops at `BinaryLibFiles` with `The system cannot find the path specified`
+
+On Windows, gVirtualXRay downloads a `gzip` when none is found, and a failed download leaves an empty file, so the build stops far from the cause. Put a `gzip.exe` on the `PATH` (Git for Windows has one, with `msys-2.0.dll`, in `C:\Program Files\Git\usr\bin`; copy both to a folder of their own and add that folder, so that the other tools of Git do not hide yours) and configure again with `--fresh`.
+
+### The tests crash right after `Creating Core instance...`
+
+The smoke tests (`XRSim_Smoke_Test`, `XRSim_Xray_View_Test`, `XRSim_Xray_Self_Test`) segfault at start-up when `engine/` was switched to another commit after the build, because the program reads the Engine's shaders and resources from that folder at run time. Put the Engine at the recorded commit again (see the first entry) and run the tests again; a rebuild is not needed.
