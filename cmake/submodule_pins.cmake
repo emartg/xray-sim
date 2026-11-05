@@ -106,9 +106,11 @@ function(xrsim_check_submodule_pin folder)
 		"  recorded in this repository: ${recorded}${recorded_description}"
 		"  checked out in ${folder}/:   ${found}${found_description}"
 		"The build uses the contents of the folder, not the recorded commit, so it would not build the version that the repository says it builds."
+		"This message is expected whenever ${folder}/ is on one of its branches (for example main) because you work on it."
 		"Two ways out:"
 		"  1. Go back to the recorded commit:  git submodule update ${folder}"
 		"     (commit or discard the work in ${folder}/ first: Git refuses to overwrite it)"
+		"     afterwards put the folder back on its branch:  git -C ${folder} switch main"
 		"  2. Move the pin on purpose:  git add ${folder}  and commit it (the checked-out commit becomes the recorded one)")
 
 	if(XRSIM_ALLOW_UNPINNED_SUBMODULES)

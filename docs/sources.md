@@ -9,7 +9,7 @@ folder.
 
 | Repository | File | What it credits |
 |---|---|---|
-| The engine (`engine/`) | [engine/docs/sources.md](../engine/docs/sources.md) | GLFW, GLM, Assimp, nlohmann/json, GoogleTest, Dear ImGui, ImGuiFileDialog, stb_image, glad, the Roboto Mono fonts, and the engine's placeholder assets |
+| The engine (`engine/`) | [engine/docs/sources.md](https://github.com/emartg/opengl-graphics-engine/blob/main/docs/sources.md) | GLFW, GLM, Assimp, nlohmann/json, GoogleTest, Dear ImGui, ImGuiFileDialog, stb_image, glad, the Roboto Mono fonts, and the engine's placeholder assets |
 | The gVirtualXRay fork (`gvirtual-xray/`) | [gvirtual-xray/docs/sources.md](../gvirtual-xray/docs/sources.md) | The gVirtualXRay project and its developers, xraylib, XrayPhysics, glad, GLEW, Assimp, zlib, and the other libraries of its build, the Welsh dragon mesh, and its other resources |
 | The simulator (this repository) | This file | Whatever the simulator adds itself (below) |
 

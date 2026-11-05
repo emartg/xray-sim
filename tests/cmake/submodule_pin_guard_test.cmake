@@ -87,7 +87,8 @@ git("${super}/engine" ignored checkout --quiet ${second_commit})
 check_case("at another commit" "${super}" stop
 	"The folder 'engine' is not at"
 	"${first_commit}" "${second_commit}"
-	"git submodule update engine" "git add engine" "-DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON")
+	"git submodule update engine" "git -C engine switch main" "is expected whenever engine/ is on one of its branches" "git add engine"
+	"-DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON")
 
 # The option turns the stop into a warning that says the same
 set(CASE_OPTIONS -DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON)
