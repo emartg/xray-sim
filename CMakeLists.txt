@@ -3,15 +3,17 @@
 ## consumed through the add_subdirectory() command (only the Core and Platform libraries of the Engine, and the
 ## core library of gVirtualXRay, are built)
 
-# The minimum version of CMake is the one required by gVirtualXRay
-cmake_minimum_required(VERSION 3.26)
-cmake_policy(VERSION 3.26)
+# The minimum version of CMake is the one required by gVirtualXRay. The range is the one of gVirtualXRay and of the Engine: 3.26
+# is the oldest version that has been run, and the policies up to those of CMake 4.2 behave as new in a newer CMake, without warnings
+cmake_minimum_required(VERSION 3.26...4.2)
+cmake_policy(VERSION 3.26...4.2)
 
 # Project name and languages
 project(XRaySimProject LANGUAGES C CXX)
 
-# Set C++ standard (the same as the Engine's, which the simulator consumes)
-set(CMAKE_CXX_STANDARD 20)
+# Set C++ standard: C++23, the one of gVirtualXRay, whose target requires it, and of the Engine (the Engine does not set a standard
+# when it is not the top-level project, so its targets take this one)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 

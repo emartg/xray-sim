@@ -13,7 +13,7 @@ with MSVC); pass `-DXRSIM_BUILD_XRAY=ON` to try it anyway (MinGW on Windows is s
 
 - **Operating System:** Windows or Linux. macOS is not supported, since it only provides OpenGL up to 4.1.
 - **GPU and drivers:** OpenGL 4.5 core profile support (a recent Mesa on Linux is enough, including the `llvmpipe` software renderer).
-- **Compiler:** MSVC from Visual Studio 2022/2026, or GCC from a MinGW installation on Windows; GCC or Clang on Linux.
+- **Compiler:** MSVC from Visual Studio 2022/2026, or GCC from a MinGW installation on Windows; GCC or Clang on Linux. The code is built as C++23, the standard of gVirtualXRay and of the Engine. The continuous integration uses GCC 13.3 and Clang 18.1 (Ubuntu 24.04), MSVC 14.51 (Visual Studio 2026) with Ninja, and MinGW GCC 15.2.
 - **CMake:** 3.26 or newer (the minimum of gVirtualXRay), which also covers the presets in `CMakePresets.json`.
 - **vcpkg (Windows):** a Git clone of [vcpkg](https://github.com/microsoft/vcpkg), with the `VCPKG_ROOT` environment variable pointing to it.
 - **Git and Git LFS:** to clone the repository and its submodules (the configuration of gVirtualXRay checks that Git LFS is installed).
