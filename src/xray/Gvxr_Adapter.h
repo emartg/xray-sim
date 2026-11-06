@@ -3,9 +3,9 @@
  * This file defines the Gvxr_Adapter class, which is the entry point of the simulator to the gVirtualXRay
  * library. It owns the X-ray renderer, the beam, the detector, and the meshes, and computes the X-ray image of the
  * meshes on the OpenGL context that is current when it is used (the context of the Engine's window).
- * The header includes no header of gVirtualXRay or of the Engine, so that the simulator can use it without the C++
- * standard, the preprocessor definitions, or the OpenGL loader of the library. The methods report failures with a
- * message instead of throwing exceptions.
+ * The header includes no header of gVirtualXRay or of the Engine, so that the simulator can use it without the
+ * preprocessor definitions or the OpenGL loader of the library (GLEW, which cannot share a file with the Engine's GLAD). The
+ * methods report failures with a message instead of throwing exceptions.
  * This is a prototype: the interface will change.
  */
 
