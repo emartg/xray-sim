@@ -41,7 +41,10 @@ if(XRSIM_BUILD_XRAY)
 	# copies could run at the same time (the executables are in the same folder and are linked in parallel), and one of
 	# them would fail with "permission denied" because the other has the file open
 	if(WIN32 AND XRAYLIB_SHARED_LIB_PATH)
+		# The folder is created first: with the Visual Studio generators the folder of the configuration (bin/Debug) does not exist
+		# when this target runs, and the copy would create a file with that name
 		add_custom_target(XRSim_Xraylib_Dll
+			COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:XRSim>
 			COMMAND ${CMAKE_COMMAND} -E copy_if_different ${XRAYLIB_SHARED_LIB_PATH} $<TARGET_FILE_DIR:XRSim>
 			COMMENT "Copying the DLL of xraylib beside the executables")
 		add_dependencies(XRSim XRSim_Xraylib_Dll)
