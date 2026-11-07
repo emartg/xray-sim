@@ -19,11 +19,6 @@ target_include_directories(XRSim_Xray PUBLIC ${PROJECT_SOURCE_DIR}/src)
 # gVirtualXRay is linked privately: its include directories and definitions do not reach the consumers
 target_link_libraries(XRSim_Xray PRIVATE gVirtualXRay::gVirtualXRay)
 
-# On Linux, gVirtualXRay is compiled with code coverage instrumentation in the Debug configuration, so the executables
-# that use it must be linked with the coverage runtime
-if(UNIX AND NOT APPLE)
-	target_link_libraries(XRSim_Xray PRIVATE "$<$<CONFIG:Debug>:--coverage>")
-endif()
 
 # Organize files into source groups for Visual Studio
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${HEADERS} ${SOURCES})
