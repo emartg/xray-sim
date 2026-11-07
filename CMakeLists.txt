@@ -20,15 +20,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Options
 option(XRSIM_BUILD_TESTS "Build the simulator tests" OFF)
 
-# The X-ray part (gVirtualXRay and the library that adapts it). It is off by default with MSVC: the pinned version of
-# gVirtualXRay passes an option to every Windows compiler that MSVC does not know, and then compiles a header as a source
-# file, which leaves its library without some of its code
-if(MSVC)
-	set(XRSIM_BUILD_XRAY_DEFAULT OFF)
-else()
-	set(XRSIM_BUILD_XRAY_DEFAULT ON)
-endif()
-option(XRSIM_BUILD_XRAY "Build the X-ray part of the simulator (gVirtualXRay and its adapter)" ${XRSIM_BUILD_XRAY_DEFAULT})
+# The X-ray part (gVirtualXRay and the library that adapts it), on by default with every compiler
+option(XRSIM_BUILD_XRAY "Build the X-ray part of the simulator (gVirtualXRay and its adapter)" ON)
 
 # The folders of the submodules must be at the commits that the repository records for them (see cmake/submodule_pins.cmake):
 # with this option, the stop becomes a warning

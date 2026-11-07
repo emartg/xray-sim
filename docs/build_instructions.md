@@ -4,10 +4,8 @@ This document explains how to build and run the simulator (`XRSim`). The simulat
 subdirectory, so the details of the prerequisites, the dependencies of the engine, and the troubleshooting of
 the platforms are in the [engine's build instructions](../engine/docs/build_instructions.md); this document
 only covers what is specific to this repository. The simulator also builds the core library of the
-gVirtualXRay fork (the X-ray part, option `XRSIM_BUILD_XRAY`, on by default except with MSVC). On Linux its
-dependencies are the system packages, and on Windows they are built by vcpkg, like the engine's. With MSVC the
-option is off by default until the fork fixes the way it forces the inclusion of a header (it breaks its own library
-with MSVC); pass `-DXRSIM_BUILD_XRAY=ON` to try it anyway (MinGW on Windows is supported).
+gVirtualXRay fork (the X-ray part, option `XRSIM_BUILD_XRAY`, on by default with every compiler: GCC, Clang, MinGW, and MSVC). On
+Linux its dependencies are the system packages, and on Windows they are built by vcpkg, like the engine's.
 
 ## Prerequisites
 
@@ -109,7 +107,7 @@ The workflow `.github/workflows/ci.yml` runs on every push to `main` and on ever
 
 - **Format:** the clang-format check above.
 - **Linux:** the `ninja-gcc-debug` and `ninja-clang-release` presets, with the system packages; it builds and runs the tests under a virtual display (Xvfb) with Mesa's software OpenGL 4.5 renderer.
-- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache, with the triplets `x64-windows-xray-ci` and `x64-mingw-dynamic-xray-ci` of `cmake/vcpkg_triplets`, which leave the compiler out of the ABI hash of the packages so that a new build of the compiler in the runner image does not discard the cache, and the host triplet `x64-windows-ci`, which does the same for the tools that vcpkg builds for itself; a compiler upgrade does not rebuild a package in the CI, because the key of the cache has the versions of the compiler, of CMake, and of PowerShell (the hash of every package has them); the summary of each job shows how many packages vcpkg restored and the entries of the hash of `zlib` and `vcpkg-cmake`: if the cache does not restore, the entry that differs between two runs is the cause); it builds and runs only the tests that need no display (the invalid argument test, the unit tests of the scene, the setup, the display, and the pin guard, and the adapter test where the X-ray part is built, which is not the case with MSVC for now), since the runners do not support OpenGL 4.5.
+- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache, with the triplets `x64-windows-xray-ci` and `x64-mingw-dynamic-xray-ci` of `cmake/vcpkg_triplets`, which leave the compiler out of the ABI hash of the packages so that a new build of the compiler in the runner image does not discard the cache, and the host triplet `x64-windows-ci`, which does the same for the tools that vcpkg builds for itself; a compiler upgrade does not rebuild a package in the CI, because the key of the cache has the versions of the compiler, of CMake, and of PowerShell (the hash of every package has them); the summary of each job shows how many packages vcpkg restored and the entries of the hash of `zlib` and `vcpkg-cmake`: if the cache does not restore, the entry that differs between two runs is the cause); it builds and runs only the tests that need no display (the invalid argument test, the unit tests of the scene, the setup, the display, and the pin guard, and the adapter test, because the X-ray part is built in every job), since the runners do not support OpenGL 4.5.
 
 ## Troubleshooting
 
@@ -171,3 +169,11 @@ On Windows, gVirtualXRay downloads a `gzip` when none is found, and a failed dow
 ### The tests crash right after `Creating Core instance...`
 
 The smoke tests (`XRSim_Smoke_Test`, `XRSim_Xray_View_Test`, `XRSim_Xray_Self_Test`) segfault at start-up when `engine/` was switched to another commit after the build, because the program reads the Engine's shaders and resources from that folder at run time. Put the Engine at the recorded commit again (see the first entry) and run the tests again; a rebuild is not needed.
+
+### The tools that the summary shows locally can differ from the ones of the runner
+
+The summary of the CI, and the debug output of vcpkg (`-DVCPKG_INSTALL_OPTIONS=--debug`), list `cmake|<version>` and `powershell|<version>` among the entries of the hash of every package. vcpkg uses the CMake and the PowerShell of the `PATH` only when they are at least the versions that its own tool list pins, and downloads the pinned ones otherwise, so the versions in a log of this PC can differ from the versions in the summary of the runner, and so can the hashes. Compare logs of the same machine: if the versions differ between two runs on the same machine, the `PATH` changed (another CMake or PowerShell comes first), and the packages are built again.
+
+### The tests open a window of the desktop in WSL
+
+In WSL, WSLg sets `WAYLAND_DISPLAY` and has a Wayland socket in `XDG_RUNTIME_DIR`, so GLFW opens a real window on your desktop instead of using the virtual display of `xvfb-run`, and a key that you press in another window reaches the smoke test (`[ERROR::INPUTMANAGER::key_callback] Unknown key input: S_PRESSED` makes `XRSim_Smoke_Test` fail). Unsetting `WAYLAND_DISPLAY` alone is not enough, because the Wayland library then looks for the socket `wayland-0` in `XDG_RUNTIME_DIR`; unset both for the run: `env -u WAYLAND_DISPLAY -u XDG_RUNTIME_DIR xvfb-run -a ctest --test-dir out/build/<preset> --output-on-failure`.
