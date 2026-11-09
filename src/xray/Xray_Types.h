@@ -48,9 +48,9 @@ struct Xray_Detector
 	double                pixel_size{ 2.0 }; // side of a pixel, in millimetres
 };
 
-// Times that the adapter spent in its calls, in milliseconds. The times of the guard, of the initialisation, and of the meshes are
-// added up since the adapter was created, so for an adapter that is created for each image they are the cost of that image. The
-// times of the computation and of the read-back are the ones of the last image
+// Times that the adapter spent in its calls, in milliseconds. The times of the guard, of the initialisation, of the meshes, and of
+// the updates are added up since the adapter was created or since reset_timings(), so for an adapter that is created for each image
+// they are the cost of that image. The times of the computation and of the read-back are the ones of the last image
 struct Xray_Timings
 {
 	double guard_ms{ 0.0 }; // saving, setting, and restoring the state of OpenGL in all the calls (it is not part of the last two times)
@@ -58,6 +58,7 @@ struct Xray_Timings
 	double glew_ms{ 0.0 };                // adopting the current context (loads the functions of the library)
 	double renderer_initialise_ms{ 0.0 }; // the initialisation of the renderer: shaders, framebuffers, and textures (part of it too)
 	double add_meshes_ms{ 0.0 };          // all the add_mesh calls
+	double update_ms{ 0.0 };              // all the update_beam, update_detector, set_mesh_transform, and set_mesh_material calls
 	unsigned int mesh_count{ 0 };         // the meshes that were added
 	double       computation_ms{ 0.0 };   // the computation of the last image, until the GPU has finished
 	double       read_back_ms{ 0.0 };     // the copy of the last image from the GPU to the memory

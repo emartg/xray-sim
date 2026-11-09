@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <string>
 
@@ -50,9 +52,31 @@ public:
 	// reason of the failure
 	std::string initialise(const Xray_Beam& beam, const Xray_Detector& detector);
 
-	// Adds a mesh to the X-ray scene (its data is copied, and uploaded to the GPU once). Returns an empty string if
+	// Adds a mesh to the X-ray scene (its data is copied, and uploaded to the GPU once) as an object that can be moved afterwards
+	// (see set_mesh_transform). The meshes are numbered from 0 in the order in which they are added. Returns an empty string if
 	// it succeeds, or the reason of the failure
 	std::string add_mesh(const Xray_Mesh& mesh);
+
+	// The following functions change what the adapter holds in place, with no new renderer: the next image takes the change. They
+	// return an empty string if they succeed, or the reason of the failure
+
+	// Changes the position of the source, the energy, and the number of photons of the beam
+	std::string update_beam(const Xray_Beam& beam);
+
+	// Changes the position, the up vector, and the pixel size of the detector. The number of pixels cannot change (the renderer
+	// sized its images for it): a new adapter is needed then
+	std::string update_detector(const Xray_Detector& detector);
+
+	// Sets the transform of a mesh: 16 floats in the column-major order of OpenGL, with the translation in the last column, in
+	// millimetres, applied to the positions that add_mesh received
+	std::string set_mesh_transform(std::size_t index, const std::array<float, 16>& matrix);
+
+	// Changes the material of a mesh
+	std::string set_mesh_material(std::size_t index, const Xray_Material& material);
+
+	// Sets to zero the times that add up over the calls (the state guard, the initialisation, the meshes, and the updates), so that
+	// the next calls are measured alone. The number of meshes and the times of the last image are kept
+	void reset_timings();
 
 	// Computes the X-ray image of the meshes. The state of OpenGL (framebuffers, viewport, program, vertex array,
 	// buffers, textures, and the depth, blend, cull, and scissor settings) is the same before and after the call.
