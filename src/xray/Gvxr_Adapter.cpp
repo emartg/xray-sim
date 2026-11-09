@@ -16,16 +16,7 @@
 #include <string>
 #include <vector>
 
-// PROTOTYPE WORKAROUND: gVirtualXRay only works with a graphics context object that it created itself (it compiles no
-// shader and uploads no mesh without one that is "ready"), and it has no way to adopt the OpenGL context that already
-// exists, which is the one of the Engine's window. The readiness flag of the context is private, so it is made
-// accessible for the include of this one header (the standard headers are included before, so they are not affected).
-// The proper fix is a function of the library that adopts the current context: it is requested from the owner of the
-// library, and this workaround goes away with it
-#define private public
 #include "gVirtualXRay/Context.h"
-#undef private
-
 #include "gVirtualXRay/Mixture.h"
 #include "gVirtualXRay/PolygonMesh.h"
 #include "gVirtualXRay/ResourceManager.h"
@@ -234,7 +225,7 @@ namespace
 // Objects of the library, which need an OpenGL context to be created, used, and destroyed
 struct Gvxr_Adapter::Implementation
 {
-	gVirtualXRay::Context      context; // declared first, so that it is destroyed last (see the workaround above)
+	gVirtualXRay::Context      context; // declared first, so that it is destroyed last; it adopts the context of the Engine's window
 	gVirtualXRay::XRayDetector detector;
 	gVirtualXRay::XRayBeam     beam;
 	gVirtualXRay::XRayRenderer renderer;
@@ -260,8 +251,8 @@ Gvxr_Adapter::~Gvxr_Adapter()
 			Gl_State_Guard guard{ guard_ms }; // the release of the renderer changes the state of OpenGL
 			implementation->meshes.clear();
 			implementation->renderer.release();
+			implementation->context.release(); // the context is the Engine's: only what the library holds is freed
 			gVirtualXRay::ResourceManager::getInstance().setGraphicsContext(nullptr);
-			implementation->context.m_ready = false; // nothing was created by the context, so there is nothing to destroy
 		}
 		catch (...)
 		{
@@ -308,20 +299,14 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 	const Scoped_Timer initialise_timer{ implementation->timings.initialise_ms };
 	try
 	{
-		// load the OpenGL functions of the library on the current context (the experimental flag is required by the
-		// core profile of the Engine)
-		const auto glew_start   = std::chrono::steady_clock::now();
-		glewExperimental        = GL_TRUE;
-		const GLenum glew_error = glewInit();
-		// GLEW reports that it has no GLX display on contexts that were not created through GLX (e.g., Wayland or
-		// EGL), but it has loaded the functions that the context provides
-		if (glew_error != GLEW_OK && glew_error != GLEW_ERROR_NO_GLX_DISPLAY)
+		// the library adopts the OpenGL context that is current (the one of the Engine's window): it loads its OpenGL
+		// functions (GLEW) and checks the version. It frees what the library holds, so it comes before the renderer is created
+		const auto adopt_start = std::chrono::steady_clock::now();
+		if (!implementation->context.adoptCurrentContext())
 		{
-			return std::string{ "GLEW could not be initialised: " } + reinterpret_cast<const char*>(glewGetErrorString(glew_error));
+			return "The library could not adopt the current OpenGL context (none is current, or it is older than 3.2)";
 		}
-		while (glGetError() != GL_NO_ERROR) // glewInit leaves an error in a core profile
-		{}
-		implementation->timings.glew_ms = get_milliseconds_since(glew_start);
+		implementation->timings.glew_ms = get_milliseconds_since(adopt_start);
 
 		if (detector.width_in_pixels == 0 || detector.height_in_pixels == 0 || !(detector.pixel_size > 0.0))
 		{
@@ -355,8 +340,8 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 
 		Gl_State_Guard guard{ implementation->timings.guard_ms }; // the initialisation of the renderer creates framebuffers and textures
 
-		// register the current context (the one of the Engine's window) as the graphics context of the library
-		implementation->context.m_ready = true;
+		// register the adopted context as the graphics context of the library (a context registers itself when it is
+		// constructed; this makes sure that it is the one in use)
 		gVirtualXRay::ResourceManager::getInstance().setGraphicsContext(&implementation->context);
 		const auto renderer_start = std::chrono::steady_clock::now();
 		implementation->renderer

@@ -55,7 +55,7 @@ struct Xray_Timings
 {
 	double guard_ms{ 0.0 }; // saving, setting, and restoring the state of OpenGL in all the calls (it is not part of the last two times)
 	double initialise_ms{ 0.0 };          // the whole initialise call
-	double glew_ms{ 0.0 };                // loading the OpenGL functions of the library (part of the initialisation)
+	double glew_ms{ 0.0 };                // adopting the current context (loads the functions of the library)
 	double renderer_initialise_ms{ 0.0 }; // the initialisation of the renderer: shaders, framebuffers, and textures (part of it too)
 	double add_meshes_ms{ 0.0 };          // all the add_mesh calls
 	unsigned int mesh_count{ 0 };         // the meshes that were added
