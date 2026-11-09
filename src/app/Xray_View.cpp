@@ -95,6 +95,18 @@ void Xray_View::draw()
 void Xray_View::apply_setup(bool should_recreate)
 {
 	setup.clamp();
+
+	// the source and the centre of the detector have to be outside of the objects: if not, the last image stays
+	const std::string problem = find_geometry_problem(setup);
+	if (problem != geometry_problem && !problem.empty())
+		std::cerr << "[WARNING::XRAY_VIEW::apply_setup] No image is computed: " << problem << std::endl;
+	geometry_problem = problem;
+	if (!problem.empty())
+	{
+		is_setup_dirty = false;
+		return;
+	}
+
 	const bool had_error = !error.empty();
 	error.clear();
 	is_setup_dirty = false;
@@ -145,13 +157,13 @@ void Xray_View::apply_setup(bool should_recreate)
 		if (error.empty())
 		{ // the meshes are uploaded in millimetres, with the transform of each object applied
 			const auto                   scene_start = std::chrono::steady_clock::now();
-			const std::vector<Xray_Mesh> meshes      = scene->make_xray_meshes();
+			const std::vector<Xray_Mesh> meshes      = scene->make_xray_local_meshes();
 			scene_ms                                 = get_milliseconds_since(scene_start);
-			for (const Xray_Mesh& mesh : meshes)
+			for (std::size_t i = 0; i < meshes.size() && error.empty(); ++i)
 			{
-				error = new_adapter->add_mesh(mesh);
-				if (!error.empty())
-					break;
+				error = new_adapter->add_mesh(meshes[i]);
+				if (error.empty())
+					error = new_adapter->set_mesh_transform(i, scene->get_xray_transform(i));
 			}
 		}
 
@@ -160,7 +172,12 @@ void Xray_View::apply_setup(bool should_recreate)
 		// the scene that the X-ray scene shows
 		applied_revision = scene->get_revision();
 		applied_materials.clear();
-		for (const Scene_Object& object : scene->get_objects()) applied_materials.push_back(object.material_index);
+		applied_transforms.clear();
+		for (std::size_t i = 0; i < scene->get_objects().size(); ++i)
+		{
+			applied_materials.push_back(scene->get_objects()[i].material_index);
+			applied_transforms.push_back(scene->get_xray_transform(i));
+		}
 	}
 	image_setup = setup;
 
@@ -198,7 +215,17 @@ void Xray_View::apply_setup(bool should_recreate)
 
 void Xray_View::update_scene()
 {
-	if (!scene || !adapter || scene->get_revision() == applied_revision)
+	// a reason that stopped the last change is looked at again every frame, because the scene may have changed back
+	const bool was_stopped = !geometry_problem.empty();
+	if (!scene || !adapter || (scene->get_revision() == applied_revision && !was_stopped))
+		return;
+
+	// the source and the centre of the detector have to be outside of the objects: if not, the last image stays
+	const std::string problem = find_geometry_problem(setup);
+	if (problem != geometry_problem && !problem.empty())
+		std::cerr << "[WARNING::XRAY_VIEW::update_scene] No image is computed: " << problem << std::endl;
+	geometry_problem = problem;
+	if (!problem.empty())
 		return;
 
 	// the objects changed, or the adapter failed: a new adapter takes the scene
@@ -209,26 +236,38 @@ void Xray_View::update_scene()
 		return;
 	}
 
-	// the materials: the meshes keep their place, and the renderer takes the new material in place
+	// the materials and the transforms: the meshes keep their place in the renderer, which takes the changes in place
 	const std::vector<Scene_Material>& materials = Scene_Material_Table::get_materials();
-	bool                               is_changed{ false };
+	bool                               is_changed{ was_stopped };
 	for (std::size_t i = 0; i < objects.size() && error.empty(); ++i)
 	{
-		if (objects[i].material_index == applied_materials[i])
-			continue;
-
-		error = adapter->set_mesh_material(i, materials[objects[i].material_index < materials.size() ? objects[i].material_index : 0].xray);
-		if (error.empty())
+		if (objects[i].material_index != applied_materials[i])
 		{
-			applied_materials[i] = objects[i].material_index;
-			is_changed           = true;
+			error =
+				adapter->set_mesh_material(i, materials[objects[i].material_index < materials.size() ? objects[i].material_index : 0].xray);
+			if (error.empty())
+			{
+				applied_materials[i] = objects[i].material_index;
+				is_changed           = true;
+			}
+		}
+
+		const std::array<float, 16> transform = scene->get_xray_transform(i);
+		if (error.empty() && transform != applied_transforms[i])
+		{
+			error = adapter->set_mesh_transform(i, transform);
+			if (error.empty())
+			{
+				applied_transforms[i] = transform;
+				is_changed            = true;
+			}
 		}
 	}
 	applied_revision = scene->get_revision();
 
 	if (!error.empty())
 	{ // a new adapter takes the scene, and the controls keep working
-		std::cerr << "[WARNING::XRAY_VIEW::update_scene] The materials could not be updated (" << error << "), a new adapter is created"
+		std::cerr << "[WARNING::XRAY_VIEW::update_scene] The scene could not be updated (" << error << "), a new adapter is created"
 				  << std::endl;
 		apply_setup(true);
 	}
@@ -236,6 +275,40 @@ void Xray_View::update_scene()
 	{
 		apply_setup();
 	}
+}
+
+double Xray_View::measure_difference_with_new_adapter()
+{
+	if (!is_image_valid || !(reference > 0.0f))
+		return -1.0;
+
+	const Xray_Image in_place_image     = image;
+	const float      in_place_reference = reference;
+	apply_setup(true);
+	if (!is_image_valid || image.pixels.size() != in_place_image.pixels.size())
+		return -1.0;
+
+	float largest_difference{ 0.0f };
+	for (std::size_t i = 0; i < image.pixels.size(); ++i)
+		largest_difference = std::max(largest_difference, std::abs(in_place_image.pixels[i] - image.pixels[i]));
+	return static_cast<double>(largest_difference) / in_place_reference;
+}
+
+std::string Xray_View::find_geometry_problem(const Xray_Setup& setup_to_check) const
+{
+	if (!scene)
+		return "";
+
+	// the source and the detector are on the axis z, at the distances of the setup
+	const Scene_Object* source_object = scene->find_object_around_point({ 0.0f, 0.0f, -setup_to_check.source_distance });
+	if (source_object)
+		return "the source is inside '" + source_object->name + "'";
+
+	const Scene_Object* detector_object = scene->find_object_around_point({ 0.0f, 0.0f, setup_to_check.detector_distance });
+	if (detector_object)
+		return "the centre of the detector is inside '" + detector_object->name + "'";
+
+	return "";
 }
 
 void Xray_View::compute()
@@ -507,6 +580,12 @@ void Xray_View::draw_window()
 	}
 	else if (is_image_valid)
 	{
+		if (!geometry_problem.empty())
+		{ // the wrap position of 0 is the edge of the content region
+			ImGui::PushTextWrapPos(0.0f);
+			ImGui::TextColored(ImVec4{ 1.0f, 0.75f, 0.3f, 1.0f }, "Not computed: %s. The last image is shown.", geometry_problem.c_str());
+			ImGui::PopTextWrapPos();
+		}
 		ImGui::TextWrapped(
 			"%u x %u pixels of %.1f mm, %.0f keV, computed in %.0f ms",
 			image.width,

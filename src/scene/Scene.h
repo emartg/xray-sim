@@ -43,6 +43,12 @@ public:
 	// ----------------
 	static constexpr float MILLIMETRES_PER_UNIT{ 10.0f }; // the unit of a scene is the centimetre
 
+	// The limits of the transform of an object. They only keep the scene valid (the objects stay near the tube, and a scale is positive:
+	// a negative one would turn the triangles inside out); they carry no clinical meaning
+	static constexpr float MIN_POSITION{ -50.0f }, MAX_POSITION{ 50.0f };   // on each axis, in centimetres
+	static constexpr float MIN_ROTATION{ -180.0f }, MAX_ROTATION{ 180.0f }; // on each axis, in degrees
+	static constexpr float MIN_SCALE{ 0.1f }, MAX_SCALE{ 5.0f };            // on each axis
+
 	// Public Static Methods
 	// ---------------------
 	// Returns the name of a shape type ("Cube", "Sphere", or "Cylinder")
@@ -63,9 +69,28 @@ public:
 	// Removes an object (the ones after it move one place down). Returns false, and changes nothing, if it does not exist
 	bool remove_object(std::size_t object_index);
 
+	// Change the position (in centimetres), the rotation (Euler angles in degrees), or the scale of an object. Every value is put
+	// within its limits first (a value that is not a number goes to the lower limit). They return false, and change nothing, if the
+	// object does not exist. The revision is raised only if the value changes
+	bool set_object_position(std::size_t object_index, const std::array<float, 3>& position);
+	bool set_object_rotation(std::size_t object_index, const std::array<float, 3>& rotation);
+	bool set_object_scale(std::size_t object_index, const std::array<float, 3>& scale);
+
 	// Returns the triangle meshes of the objects for the X-ray library, in millimetres, with the transform of each
 	// object applied to its vertices and the X-ray material of its material
 	std::vector<Xray_Mesh> make_xray_meshes() const;
+
+	// Returns the triangle meshes of the objects in millimetres, in the local space of each object (no transform applied), for the X-ray
+	// library to move them in place with get_xray_transform
+	std::vector<Xray_Mesh> make_xray_local_meshes() const;
+
+	// Returns the transform of an object for the X-ray library: 16 floats in the column-major order of OpenGL, with the translation in
+	// the last column in millimetres, to apply to the positions of make_xray_local_meshes (the identity if the object does not exist)
+	std::array<float, 16> get_xray_transform(std::size_t object_index) const;
+
+	// Returns the first object whose bounding sphere (its centre is the position of the object, its radius the farthest vertex times the
+	// largest scale) contains the point, in centimetres, or null if there is none. The tube must stay outside of the objects
+	const Scene_Object* find_object_around_point(const std::array<float, 3>& point) const;
 
 	// Getters
 	const std::vector<Scene_Object>& get_objects() const { return objects; }

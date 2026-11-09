@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -52,17 +53,26 @@ public:
 	// Simulator_Gui between the start of the ImGui frame and its rendering. The first call starts the adapter and computes the image
 	void draw();
 
-	// Takes the changes of the scene (called every frame by draw): the X-ray scene follows the materials of the objects in place, and is
-	// created again if the objects changed. Does nothing if the scene did not change since the last image
+	// Takes the changes of the scene (called every frame by draw): the X-ray scene follows the materials and the transforms of the objects
+	// in place, and is created again if the objects changed. Does nothing if the scene did not change since the last image. If the source
+	// or the centre of the detector is inside an object (see get_geometry_problem), nothing is computed and the last image stays
 	void update_scene();
 
-	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the scene (in centimetres) on the
-	// detector, relative to the unattenuated beam. Returns -1 if the projection is outside of the detector
+	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the plane z = 0 of the scene (in
+	// centimetres) on the detector, relative to the unattenuated beam. Returns -1 if the projection is outside of the detector
 	double get_transmission_at(float x, float y) const;
+
+	// Creates a new adapter with the scene and the setup, computes the image again, and returns the largest difference between this image
+	// and the previous one (updated in place) relative to the unattenuated beam, or -1 if there is no valid image to compare. For the tests
+	double measure_difference_with_new_adapter();
 
 	// Getters
 	// true if the checks of the first image (see check_image) were all successful
 	bool get_is_check_passed() const { return is_check_passed; }
+
+	// The reason why the last change of the scene or of the setup was not computed (the source or the centre of the detector is inside an
+	// object), or an empty string. The last image stays on the screen while there is a reason
+	const std::string& get_geometry_problem() const { return geometry_problem; }
 
 private:
 	// Private Methods
@@ -100,6 +110,10 @@ private:
 	// each object are printed
 	std::string check_current_image(double& water_transmission, double& iron_transmission) const;
 
+	// Returns why the source or the centre of the detector of the setup is inside an object of the scene (they must be outside), or an
+	// empty string if they are not
+	std::string find_geometry_problem(const Xray_Setup& setup_to_check) const;
+
 	// Checks the first image of the scene and that the iron sphere attenuates more than the water sphere; then changes the setup (a
 	// lower energy must attenuate more, and another geometry and detector must still give a valid image of the right size) and checks
 	// the images, checks that the update in place gives the image of a new adapter, and restores the setup. Prints the result with the
@@ -108,13 +122,15 @@ private:
 
 	// Private Attributes
 	// ------------------
-	std::shared_ptr<const Scene>  scene;
-	std::unique_ptr<Gvxr_Adapter> adapter;
-	std::string                   error; // the reason the adapter or the image failed; empty if there is none
-	bool                          is_check_requested{ false };
-	bool                          is_check_passed{ false };
-	std::uint64_t                 applied_revision{ 0 }; // the revision of the scene that the X-ray scene shows
-	std::vector<std::size_t>      applied_materials;     // the material of each mesh of the X-ray scene
+	std::shared_ptr<const Scene>       scene;
+	std::unique_ptr<Gvxr_Adapter>      adapter;
+	std::string                        error; // the reason the adapter or the image failed; empty if there is none
+	bool                               is_check_requested{ false };
+	bool                               is_check_passed{ false };
+	std::uint64_t                      applied_revision{ 0 }; // the revision of the scene that the X-ray scene shows
+	std::vector<std::size_t>           applied_materials;     // the material of each mesh of the X-ray scene
+	std::vector<std::array<float, 16>> applied_transforms;    // the transform of each mesh of the X-ray scene
+	std::string                        geometry_problem;      // why the scene or the setup was not computed; empty if it was
 	bool is_console_output_enabled{ false }; // true: every image prints its times to the console (the user's option, and the check's)
 
 	Xray_Setup setup;                     // the values that the user chooses
