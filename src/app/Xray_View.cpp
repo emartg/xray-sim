@@ -15,6 +15,7 @@
 #include <glad/glad.h>
 #include <imgui.h>
 
+#include "scene/Scene_Material_Table.h"
 #include "xray/Gvxr_Adapter.h"
 
 namespace
@@ -73,6 +74,8 @@ void Xray_View::draw()
 	{ // the first time: the context of the window is current, so the adapter can start, and the image is computed
 		apply_setup();
 	}
+
+	update_scene();
 
 	if (is_check_requested && is_image_valid)
 	{
@@ -153,6 +156,11 @@ void Xray_View::apply_setup(bool should_recreate)
 		}
 
 		adapter = std::move(new_adapter); // kept even after a failure, so that the initialisation is not tried again every frame
+
+		// the scene that the X-ray scene shows
+		applied_revision = scene->get_revision();
+		applied_materials.clear();
+		for (const Scene_Object& object : scene->get_objects()) applied_materials.push_back(object.material_index);
 	}
 	image_setup = setup;
 
@@ -186,6 +194,48 @@ void Xray_View::apply_setup(bool should_recreate)
 			  << timings.read_back_ms << "), mirror " << mirror_ms << "; state guard " << timings.guard_ms
 			  << " ms in all the calls; images in the last " << IMAGE_COUNT_SECONDS << " seconds: " << get_images_in_last_seconds()
 			  << std::endl;
+}
+
+void Xray_View::update_scene()
+{
+	if (!scene || !adapter || scene->get_revision() == applied_revision)
+		return;
+
+	// the objects changed, or the adapter failed: a new adapter takes the scene
+	const std::vector<Scene_Object>& objects = scene->get_objects();
+	if (!error.empty() || objects.size() != applied_materials.size())
+	{
+		apply_setup(true);
+		return;
+	}
+
+	// the materials: the meshes keep their place, and the renderer takes the new material in place
+	const std::vector<Scene_Material>& materials = Scene_Material_Table::get_materials();
+	bool                               is_changed{ false };
+	for (std::size_t i = 0; i < objects.size() && error.empty(); ++i)
+	{
+		if (objects[i].material_index == applied_materials[i])
+			continue;
+
+		error = adapter->set_mesh_material(i, materials[objects[i].material_index < materials.size() ? objects[i].material_index : 0].xray);
+		if (error.empty())
+		{
+			applied_materials[i] = objects[i].material_index;
+			is_changed           = true;
+		}
+	}
+	applied_revision = scene->get_revision();
+
+	if (!error.empty())
+	{ // a new adapter takes the scene, and the controls keep working
+		std::cerr << "[WARNING::XRAY_VIEW::update_scene] The materials could not be updated (" << error << "), a new adapter is created"
+				  << std::endl;
+		apply_setup(true);
+	}
+	else if (is_changed)
+	{
+		apply_setup();
+	}
 }
 
 void Xray_View::compute()
@@ -681,4 +731,5 @@ void Xray_View::check_image()
 	std::cout << "[SUCCESS::XRAY_VIEW::check_image] The X-ray images of the scene are valid, each object attenuates the beam, the "
 				 "changes of the setup take effect, and the update in place gives the image of a new adapter"
 			  << std::endl;
+	is_check_passed = true;
 }

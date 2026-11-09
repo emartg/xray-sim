@@ -23,7 +23,7 @@
 
 // Public Static Methods
 // ---------------------
-void Scene_Builder::build(const Scene& scene, Core* engine)
+std::vector<std::uint32_t> Scene_Builder::build(const Scene& scene, Core* engine)
 {
 	auto& node_manager  = engine->get_node_manager();
 	auto& scene_manager = engine->get_scene_manager();
@@ -47,6 +47,8 @@ void Scene_Builder::build(const Scene& scene, Core* engine)
 
 	// a node for each object, with the geometry and the transform of the scene
 	const std::vector<Scene_Material>& materials = Scene_Material_Table::get_materials();
+	std::vector<std::uint32_t>         node_ids;
+	node_ids.reserve(scene.get_objects().size());
 	for (const Scene_Object& object : scene.get_objects())
 	{
 		const Scene_Material& material = materials[object.material_index < materials.size() ? object.material_index : 0];
@@ -60,6 +62,9 @@ void Scene_Builder::build(const Scene& scene, Core* engine)
 			glm::quat{ glm::radians(glm::vec3{ object.rotation[0], object.rotation[1], object.rotation[2] }) },
 			glm::vec3{ object.scale[0], object.scale[1], object.scale[2] });
 		node->set_name(String_Utils::generate_id_prefixed_name(node));
+		node_ids.push_back(node->get_id());
 		node_manager->add_node(std::move(node));
 	}
+
+	return node_ids;
 }

@@ -12,6 +12,8 @@
 #pragma once
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -49,6 +51,18 @@ public:
 	// Draws the windows of the X-ray view and, in the single view, the image as the background. Called every frame by the
 	// Simulator_Gui between the start of the ImGui frame and its rendering. The first call starts the adapter and computes the image
 	void draw();
+
+	// Takes the changes of the scene (called every frame by draw): the X-ray scene follows the materials of the objects in place, and is
+	// created again if the objects changed. Does nothing if the scene did not change since the last image
+	void update_scene();
+
+	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the scene (in centimetres) on the
+	// detector, relative to the unattenuated beam. Returns -1 if the projection is outside of the detector
+	double get_transmission_at(float x, float y) const;
+
+	// Getters
+	// true if the checks of the first image (see check_image) were all successful
+	bool get_is_check_passed() const { return is_check_passed; }
 
 private:
 	// Private Methods
@@ -92,16 +106,15 @@ private:
 	// format of the Engine
 	void check_image();
 
-	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the scene (in centimetres) on the
-	// detector, relative to the unattenuated beam. Returns -1 if the projection is outside of the detector
-	double get_transmission_at(float x, float y) const;
-
 	// Private Attributes
 	// ------------------
 	std::shared_ptr<const Scene>  scene;
 	std::unique_ptr<Gvxr_Adapter> adapter;
 	std::string                   error; // the reason the adapter or the image failed; empty if there is none
 	bool                          is_check_requested{ false };
+	bool                          is_check_passed{ false };
+	std::uint64_t                 applied_revision{ 0 }; // the revision of the scene that the X-ray scene shows
+	std::vector<std::size_t>      applied_materials;     // the material of each mesh of the X-ray scene
 	bool is_console_output_enabled{ false }; // true: every image prints its times to the console (the user's option, and the check's)
 
 	Xray_Setup setup;                     // the values that the user chooses
