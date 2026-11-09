@@ -2,12 +2,14 @@
  * Scene_Test.cpp
  * This file is the test of the scene library: the shapes (closed surfaces with outward triangles and the volume they
  * should have), the table of materials, the default scene with its conversion to X-ray meshes (the units and the
- * transforms), and the changes that the panel makes (a material, a removal). It needs no OpenGL context. It returns an
- * error code if a check fails, and prints each failure with the format of the Engine's messages.
+ * transforms), and the changes that the panel makes (a material, a transform, a removal, and the bounding spheres). It needs
+ * no OpenGL context. It returns an error code if a check fails, and prints each failure with the format of the Engine's messages.
  */
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <map>
 #include <numbers>
@@ -225,6 +227,93 @@ namespace
 		check(!scene.remove_object(count), "changes: removing an object that does not exist should be refused");
 		check(scene.get_revision() == revision, "changes: a refused removal should not raise the revision");
 	}
+
+	// Checks the changes of the transform of an object (the limits, the refusals, the revision), the transform that the X-ray library
+	// applies to the local meshes (it must give the world meshes), and the bounding spheres that keep the tube outside of the objects
+	void test_scene_transforms()
+	{
+		Scene scene = Scene::make_default_scene();
+
+		// a value within the limits is set and raises the revision; the same value again changes nothing
+		std::uint64_t revision = scene.get_revision();
+		check(scene.set_object_position(0, { 3.0f, -4.0f, 5.0f }), "transform: a valid position should be accepted");
+		check(
+			scene.get_objects()[0].position == std::array<float, 3>{ 3.0f, -4.0f, 5.0f },
+			"transform: the object should have the position");
+		check(scene.get_revision() > revision, "transform: a new position should raise the revision");
+		revision = scene.get_revision();
+		check(scene.set_object_position(0, { 3.0f, -4.0f, 5.0f }), "transform: the same position should be accepted");
+		check(scene.get_revision() == revision, "transform: the same position should not raise the revision");
+
+		// the values are put within their limits (a value that is not a number goes to the lower limit)
+		scene.set_object_position(0, { 100.0f, -100.0f, std::nanf("") });
+		check(
+			scene.get_objects()[0].position == std::array<float, 3>{ Scene::MAX_POSITION, Scene::MIN_POSITION, Scene::MIN_POSITION },
+			"transform: the position should be put within its limits");
+		scene.set_object_rotation(0, { 400.0f, -400.0f, 90.0f });
+		check(
+			scene.get_objects()[0].rotation == std::array<float, 3>{ Scene::MAX_ROTATION, Scene::MIN_ROTATION, 90.0f },
+			"transform: the rotation should be put within its limits");
+		scene.set_object_scale(0, { 0.0f, 100.0f, -1.0f });
+		check(
+			scene.get_objects()[0].scale == std::array<float, 3>{ Scene::MIN_SCALE, Scene::MAX_SCALE, Scene::MIN_SCALE },
+			"transform: the scale should be put within its limits, and stay positive");
+
+		// an object that does not exist is refused
+		revision = scene.get_revision();
+		check(
+			!scene.set_object_position(99, { 0.0f, 0.0f, 0.0f }),
+			"transform: the position of an object that does not exist should be refused");
+		check(
+			!scene.set_object_rotation(99, { 0.0f, 0.0f, 0.0f }),
+			"transform: the rotation of an object that does not exist should be refused");
+		check(!scene.set_object_scale(99, { 1.0f, 1.0f, 1.0f }), "transform: the scale of an object that does not exist should be refused");
+		check(scene.get_revision() == revision, "transform: a refused change should not raise the revision");
+
+		// the transform of the X-ray library moves the local meshes (millimetres) to the world meshes
+		scene.set_object_position(1, { 4.0f, -3.0f, 2.0f });
+		scene.set_object_rotation(1, { 20.0f, 30.0f, 40.0f });
+		scene.set_object_scale(1, { 1.5f, 0.5f, 2.0f });
+		const std::vector<Xray_Mesh> local_meshes = scene.make_xray_local_meshes();
+		const std::vector<Xray_Mesh> world_meshes = scene.make_xray_meshes();
+		check(local_meshes.size() == world_meshes.size(), "transform: there should be one local mesh per object");
+		for (std::size_t i = 0; i < local_meshes.size() && i < world_meshes.size(); ++i)
+		{
+			const std::array<float, 16> m = scene.get_xray_transform(i);
+			double                      largest_difference{ 0.0 };
+			for (std::size_t j = 0; j + 2 < local_meshes[i].positions.size(); j += 3)
+			{
+				const double x = local_meshes[i].positions[j];
+				const double y = local_meshes[i].positions[j + 1];
+				const double z = local_meshes[i].positions[j + 2];
+				largest_difference =
+					std::max(largest_difference, std::abs(m[0] * x + m[4] * y + m[8] * z + m[12] - world_meshes[i].positions[j]));
+				largest_difference =
+					std::max(largest_difference, std::abs(m[1] * x + m[5] * y + m[9] * z + m[13] - world_meshes[i].positions[j + 1]));
+				largest_difference =
+					std::max(largest_difference, std::abs(m[2] * x + m[6] * y + m[10] * z + m[14] - world_meshes[i].positions[j + 2]));
+			}
+			check(
+				largest_difference < 1e-3,
+				"transform: the transform of " + scene.get_objects()[i].name + " should move its local mesh to its world mesh");
+		}
+		const std::array<float, 16> identity{ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };
+		check(scene.get_xray_transform(99) == identity, "transform: the transform of an object that does not exist should be the identity");
+
+		// the bounding sphere of an object (its farthest vertex times the largest scale) contains its surroundings, and nothing else
+		Scene        single;
+		Scene_Object object = Scene::make_default_scene().get_objects()[0]; // the water sphere of radius 4 cm at (-9, 0, 0)
+		object.position     = { 0.0f, 0.0f, 0.0f };
+		single.add_object(object);
+		check(single.find_object_around_point({ 3.9f, 0.0f, 0.0f }) != nullptr, "bounds: a point inside the radius should be found");
+		check(single.find_object_around_point({ 4.2f, 0.0f, 0.0f }) == nullptr, "bounds: a point outside the radius should not be found");
+		check(single.find_object_around_point({ 0.0f, 0.0f, -100.0f }) == nullptr, "bounds: a far point should not be found");
+		single.set_object_scale(0, { 2.0f, 1.0f, 1.0f });
+		check(single.find_object_around_point({ 7.9f, 0.0f, 0.0f }) != nullptr, "bounds: the largest scale should enlarge the sphere");
+		check(
+			single.find_object_around_point({ 0.0f, 0.0f, 0.0f })->name == object.name,
+			"bounds: the object found should be the one around the point");
+	}
 } // namespace
 
 int main()
@@ -233,6 +322,7 @@ int main()
 	test_materials();
 	test_default_scene();
 	test_scene_changes();
+	test_scene_transforms();
 
 	if (failures != 0)
 	{

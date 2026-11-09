@@ -11,6 +11,7 @@
 #include <imgui.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "Scene_Sync.h"
 #include "core/Core.h"
@@ -280,7 +281,7 @@ void Simulator_Gui::draw_scene_window()
 	const std::optional<std::size_t> selected = scene_sync ? scene_sync->get_selected_object() : std::nullopt;
 
 	ImGui::SetNextWindowPos(ImVec2{ 20.0f, 110.0f }, ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2{ 520.0f, 340.0f }, ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2{ 520.0f, 380.0f }, ImGuiCond_FirstUseEver);
 	ImGui::Begin("Scene");
 
 	// the objects of the scene: the name, the shape, the material, and the position in centimetres; the row of the selected object has a
@@ -347,9 +348,19 @@ void Simulator_Gui::draw_scene_window()
 			"X-ray material: %s, %.3g g/cm3",
 			materials[material_index].xray.compound.c_str(),
 			materials[material_index].xray.density);
-		ImGui::TextWrapped("Position (cm): %.1f, %.1f, %.1f", current.position[0], current.position[1], current.position[2]);
-		ImGui::TextWrapped("Rotation (degrees): %.1f, %.1f, %.1f", current.rotation[0], current.rotation[1], current.rotation[2]);
-		ImGui::TextWrapped("Scale: %.2f, %.2f, %.2f", current.scale[0], current.scale[1], current.scale[2]);
+
+		// the transform of the object: the sliders keep every value within the limits of the scene, also when a value is typed; the nodes
+		// and the X-ray image follow the scene (see Scene_Sync and Xray_View)
+		const int            clamp_flag = ImGuiSliderFlags_AlwaysClamp;
+		std::array<float, 3> position   = current.position;
+		std::array<float, 3> rotation   = current.rotation;
+		std::array<float, 3> scale      = current.scale;
+		if (ImGui::SliderFloat3("Position (cm)", position.data(), Scene::MIN_POSITION, Scene::MAX_POSITION, "%.1f", clamp_flag))
+			scene->set_object_position(*selected, position);
+		if (ImGui::SliderFloat3("Rotation (degrees)", rotation.data(), Scene::MIN_ROTATION, Scene::MAX_ROTATION, "%.1f", clamp_flag))
+			scene->set_object_rotation(*selected, rotation);
+		if (ImGui::SliderFloat3("Scale", scale.data(), Scene::MIN_SCALE, Scene::MAX_SCALE, "%.2f", clamp_flag))
+			scene->set_object_scale(*selected, scale);
 	}
 
 	ImGui::End();
@@ -417,6 +428,91 @@ void Simulator_Gui::run_scene_change_test()
 		return;
 	}
 
+	// a transform: the node moves, turns, and scales with the object, and the X-ray image follows in place
+	const std::size_t cube = find_object("Aluminium Cube");
+	if (cube == count)
+	{
+		fail("The default scene has not the aluminium cube");
+		return;
+	}
+	const float                cube_x        = scene->get_objects()[cube].position[0];
+	const float                cube_y        = scene->get_objects()[cube].position[1];
+	const double               cube_before   = xray_view->get_transmission_at(cube_x, cube_y);
+	const std::array<float, 3> cube_rotation = scene->get_objects()[cube].rotation;
+	scene->set_object_position(cube, { cube_x, cube_y + 5.0f, 0.0f });
+	scene->set_object_rotation(cube, { 0.0f, 60.0f, 15.0f });
+	scene->set_object_scale(water, { 0.5f, 0.5f, 0.5f });
+	scene_sync->update();
+	xray_view->update_scene();
+
+	const std::shared_ptr<Node> cube_node = engine->get_node_manager()->get_node_by_id(scene_sync->get_node_id(cube));
+	if (!cube_node || !water_node)
+	{
+		fail("A node of the cube or of the sphere does not exist");
+		return;
+	}
+	const glm::quat expected_rotation{ glm::radians(glm::vec3{ 0.0f, 60.0f, 15.0f }) };
+	if (cube_node->get_position() != glm::vec3{ cube_x, cube_y + 5.0f, 0.0f } ||
+		std::abs(glm::dot(cube_node->get_rotation(), expected_rotation)) < 0.9999f || water_node->get_scale() != glm::vec3{ 0.5f })
+	{
+		fail("The nodes did not take the position, the rotation, and the scale");
+		return;
+	}
+	const double cube_after         = xray_view->get_transmission_at(cube_x, cube_y);
+	const double cube_moved         = xray_view->get_transmission_at(cube_x, cube_y + 5.0f);
+	const double water_when_smaller = xray_view->get_transmission_at(water_x, water_y);
+	std::cout << "[INFO::SIMULATOR_GUI::run_scene_change_test] transmission where the cube was: " << cube_before << " before, "
+			  << cube_after << " after it moved up 5 cm (" << cube_moved
+			  << " at its new place); behind the sphere at half its size: " << water_when_smaller << std::endl;
+	if (!(cube_after > 0.5 && cube_after > 10.0 * cube_before && cube_moved < 0.5))
+	{
+		fail("The X-ray image did not follow the movement of the cube");
+		return;
+	}
+	if (!(water_when_smaller > 3.0 * water_after))
+	{
+		fail("The X-ray image did not follow the scale of the sphere");
+		return;
+	}
+	const double difference = xray_view->measure_difference_with_new_adapter();
+	std::cout << "[INFO::SIMULATOR_GUI::run_scene_change_test] the image updated in place differs from the one of a new adapter by "
+			  << difference << " of the unattenuated beam" << std::endl;
+	if (!(difference >= 0.0 && difference < 1.0e-3))
+	{
+		fail("The image updated in place is not the one of a new adapter");
+		return;
+	}
+
+	// the centre of the detector inside an object: no image is computed, the last one stays, and the reason is given; the object back
+	// out of the way, the image is computed again
+	scene->set_object_position(water, { 0.0f, 0.0f, 49.5f }); // the detector is 50 cm behind the plane z = 0
+	scene_sync->update();
+	xray_view->update_scene();
+	const double      cube_while_stopped = xray_view->get_transmission_at(cube_x, cube_y + 5.0f);
+	const std::string problem            = xray_view->get_geometry_problem();
+	std::cout << "[INFO::SIMULATOR_GUI::run_scene_change_test] with the sphere around the centre of the detector: '" << problem << "'"
+			  << std::endl;
+	if (problem.empty() || cube_while_stopped != cube_moved)
+	{
+		fail("The sphere around the detector was not refused, or the last image did not stay");
+		return;
+	}
+	scene->set_object_position(water, { water_x, water_y, 0.0f });
+	scene_sync->update();
+	xray_view->update_scene();
+	if (!xray_view->get_geometry_problem().empty() || !(xray_view->get_transmission_at(water_x, water_y) > 0.0))
+	{
+		fail("The image was not computed again when the sphere left the detector");
+		return;
+	}
+
+	// the cube and the sphere are put back, so that the click of the next test finds the cube at the centre of the 3D view
+	scene->set_object_position(cube, { cube_x, cube_y, 0.0f });
+	scene->set_object_rotation(cube, cube_rotation);
+	scene->set_object_scale(water, { 1.0f, 1.0f, 1.0f });
+	scene_sync->update();
+	xray_view->update_scene();
+
 	// a node deleted in the Engine, as the Delete key does for the selected node: the object leaves the scene and the X-ray image
 	const float  iron_x      = scene->get_objects()[iron].position[0];
 	const float  iron_y      = scene->get_objects()[iron].position[1];
@@ -445,8 +541,8 @@ void Simulator_Gui::run_scene_change_test()
 		return;
 	}
 
-	std::cout << "[SUCCESS::SIMULATOR_GUI::run_scene_change_test] The change of a material and the deletion of a node reach the node, "
-				 "the scene, and the X-ray image"
+	std::cout << "[SUCCESS::SIMULATOR_GUI::run_scene_change_test] The changes of a material and of a transform and the deletion of a "
+				 "node reach the node, the scene, and the X-ray image"
 			  << std::endl;
 #endif
 }

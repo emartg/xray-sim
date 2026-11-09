@@ -5,9 +5,12 @@
 
 #include "scene/Scene.h"
 
+#include <algorithm>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #include "scene/Scene_Material_Table.h"
 #include "scene/Shape_Factory.h"
@@ -40,6 +43,42 @@ namespace
 		const glm::quat rotation{ glm::radians(glm::vec3{ object.rotation[0], object.rotation[1], object.rotation[2] }) };
 		return glm::translate(glm::mat4{ 1.0f }, glm::vec3{ object.position[0], object.position[1], object.position[2] }) *
 			glm::mat4_cast(rotation) * glm::scale(glm::mat4{ 1.0f }, glm::vec3{ object.scale[0], object.scale[1], object.scale[2] });
+	}
+
+	// Returns the transform of an object for the X-ray library: the model matrix with the translation in millimetres, as the vertices
+	// that it moves are
+	glm::mat4 make_xray_model_matrix(const Scene_Object& object)
+	{
+		const glm::quat rotation{ glm::radians(glm::vec3{ object.rotation[0], object.rotation[1], object.rotation[2] }) };
+		return glm::translate(
+				   glm::mat4{ 1.0f },
+				   glm::vec3{ object.position[0], object.position[1], object.position[2] } * Scene::MILLIMETRES_PER_UNIT) *
+			glm::mat4_cast(rotation) * glm::scale(glm::mat4{ 1.0f }, glm::vec3{ object.scale[0], object.scale[1], object.scale[2] });
+	}
+
+	// Puts a value within its limits (a value that is not a number goes to the lower limit)
+	float clamp_value(float value, float lower, float upper)
+	{
+		if (!(value >= lower))
+			return lower;
+		return value > upper ? upper : value;
+	}
+
+	std::array<float, 3> clamp_values(const std::array<float, 3>& values, float lower, float upper)
+	{
+		return { clamp_value(values[0], lower, upper), clamp_value(values[1], lower, upper), clamp_value(values[2], lower, upper) };
+	}
+
+	// Returns the radius of the sphere around the position of an object that contains it: the farthest vertex times the largest scale
+	float get_bounding_radius(const Scene_Object& object)
+	{
+		float farthest{ 0.0f };
+		for (std::size_t i = 0; i < object.shape.get_vertex_count(); ++i)
+		{
+			const float* vertex = &object.shape.vertices[i * Shape_Data::FLOATS_PER_VERTEX];
+			farthest            = std::max(farthest, glm::length(glm::vec3{ vertex[0], vertex[1], vertex[2] }));
+		}
+		return farthest * std::max({ object.scale[0], object.scale[1], object.scale[2] });
 	}
 } // namespace
 
@@ -116,6 +155,95 @@ bool Scene::remove_object(std::size_t object_index)
 	objects.erase(objects.begin() + static_cast<std::ptrdiff_t>(object_index));
 	++revision;
 	return true;
+}
+
+bool Scene::set_object_position(std::size_t object_index, const std::array<float, 3>& position)
+{
+	if (object_index >= objects.size())
+		return false;
+
+	const std::array<float, 3> clamped = clamp_values(position, MIN_POSITION, MAX_POSITION);
+	if (objects[object_index].position != clamped)
+	{
+		objects[object_index].position = clamped;
+		++revision;
+	}
+	return true;
+}
+
+bool Scene::set_object_rotation(std::size_t object_index, const std::array<float, 3>& rotation)
+{
+	if (object_index >= objects.size())
+		return false;
+
+	const std::array<float, 3> clamped = clamp_values(rotation, MIN_ROTATION, MAX_ROTATION);
+	if (objects[object_index].rotation != clamped)
+	{
+		objects[object_index].rotation = clamped;
+		++revision;
+	}
+	return true;
+}
+
+bool Scene::set_object_scale(std::size_t object_index, const std::array<float, 3>& scale)
+{
+	if (object_index >= objects.size())
+		return false;
+
+	const std::array<float, 3> clamped = clamp_values(scale, MIN_SCALE, MAX_SCALE);
+	if (objects[object_index].scale != clamped)
+	{
+		objects[object_index].scale = clamped;
+		++revision;
+	}
+	return true;
+}
+
+std::vector<Xray_Mesh> Scene::make_xray_local_meshes() const
+{
+	std::vector<Xray_Mesh> meshes;
+	meshes.reserve(objects.size());
+
+	const std::vector<Scene_Material>& materials = Scene_Material_Table::get_materials();
+	for (const Scene_Object& object : objects)
+	{
+		Xray_Mesh mesh;
+		mesh.name = object.name;
+		mesh.positions.reserve(object.shape.get_vertex_count() * 3);
+		for (std::size_t i = 0; i < object.shape.get_vertex_count(); ++i)
+		{
+			const float* vertex = &object.shape.vertices[i * Shape_Data::FLOATS_PER_VERTEX];
+			mesh.positions.insert(
+				mesh.positions.end(),
+				{ vertex[0] * MILLIMETRES_PER_UNIT, vertex[1] * MILLIMETRES_PER_UNIT, vertex[2] * MILLIMETRES_PER_UNIT });
+		}
+		mesh.indices  = object.shape.indices;
+		mesh.material = materials[object.material_index < materials.size() ? object.material_index : 0].xray;
+
+		meshes.push_back(std::move(mesh));
+	}
+
+	return meshes;
+}
+
+std::array<float, 16> Scene::get_xray_transform(std::size_t object_index) const
+{
+	std::array<float, 16> transform;
+	const glm::mat4       matrix = object_index < objects.size() ? make_xray_model_matrix(objects[object_index]) : glm::mat4{ 1.0f };
+	std::copy_n(glm::value_ptr(matrix), transform.size(), transform.begin());
+	return transform;
+}
+
+const Scene_Object* Scene::find_object_around_point(const std::array<float, 3>& point) const
+{
+	const glm::vec3 position{ point[0], point[1], point[2] };
+	for (const Scene_Object& object : objects)
+	{
+		const glm::vec3 centre{ object.position[0], object.position[1], object.position[2] };
+		if (glm::length(position - centre) < get_bounding_radius(object))
+			return &object;
+	}
+	return nullptr;
 }
 
 std::vector<Xray_Mesh> Scene::make_xray_meshes() const

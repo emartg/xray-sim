@@ -19,17 +19,24 @@
 // ------------
 Scene_Sync::Scene_Sync(std::shared_ptr<Scene> scene) : scene{ std::move(scene) } {}
 
+// Private Static Methods
+// ----------------------
+Scene_Sync::Applied_State Scene_Sync::make_applied_state(const Scene_Object& object)
+{
+	return Applied_State{ object.material_index, object.position, object.rotation, object.scale };
+}
+
 // Public Methods
 // --------------
 void Scene_Sync::set_node_ids(std::vector<std::uint32_t> ids)
 {
 	node_ids = std::move(ids);
 
-	// the nodes were built from the objects, so they show the materials that the objects have now
-	applied_materials.clear();
+	// the nodes were built from the objects, so they show what the objects have now
+	applied_state.clear();
 	if (scene)
 	{
-		for (const Scene_Object& object : scene->get_objects()) applied_materials.push_back(object.material_index);
+		for (const Scene_Object& object : scene->get_objects()) applied_state.push_back(make_applied_state(object));
 	}
 }
 
@@ -51,24 +58,41 @@ void Scene_Sync::update()
 				  << "' was deleted in the Engine: the object is removed from the scene" << std::endl;
 		scene->remove_object(i);
 		node_ids.erase(node_ids.begin() + static_cast<std::ptrdiff_t>(i));
-		applied_materials.erase(applied_materials.begin() + static_cast<std::ptrdiff_t>(i));
+		applied_state.erase(applied_state.begin() + static_cast<std::ptrdiff_t>(i));
 	}
 
-	// the nodes whose objects have another material: the colour of the new material
+	// the nodes whose objects changed: the colour of the new material, and the new position, rotation, and scale
 	const std::vector<Scene_Material>& materials = Scene_Material_Table::get_materials();
 	for (std::size_t i = 0; i < node_ids.size(); ++i)
 	{
-		const std::size_t material_index = scene->get_objects()[i].material_index;
-		if (material_index == applied_materials[i] || material_index >= materials.size())
-			continue;
+		const Scene_Object& object = scene->get_objects()[i];
+		Applied_State&      state  = applied_state[i];
 
 		const std::shared_ptr<Node> node = node_manager->get_node_by_id(node_ids[i]);
-		if (node)
+		if (!node)
+			continue;
+
+		if (object.material_index != state.material_index && object.material_index < materials.size())
 		{
-			const std::array<float, 4>& albedo = materials[material_index].albedo;
+			const std::array<float, 4>& albedo = materials[object.material_index].albedo;
 			node->set_albedo(glm::vec4{ albedo[0], albedo[1], albedo[2], albedo[3] });
+			state.material_index = object.material_index;
 		}
-		applied_materials[i] = material_index;
+		if (object.position != state.position)
+		{
+			node->set_position(glm::vec3{ object.position[0], object.position[1], object.position[2] });
+			state.position = object.position;
+		}
+		if (object.rotation != state.rotation)
+		{ // the angles are set as the constructor of the node took them: Euler angles in degrees
+			node->set_rotation_in_euler_angles(glm::vec3{ object.rotation[0], object.rotation[1], object.rotation[2] });
+			state.rotation = object.rotation;
+		}
+		if (object.scale != state.scale)
+		{
+			node->set_scale(glm::vec3{ object.scale[0], object.scale[1], object.scale[2] });
+			state.scale = object.scale;
+		}
 	}
 }
 
