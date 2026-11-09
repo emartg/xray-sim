@@ -99,6 +99,96 @@ namespace
 				sum += image.pixels[static_cast<std::size_t>(row) * image.width + column];
 		return sum / (static_cast<double>(side) * side);
 	}
+
+	// Checks that what the adapter changes in place gives the image of a new adapter: the material and the transform of a mesh, and the
+	// beam and the detector (with the same number of pixels; another number is refused). Returns an empty string if it does, or the
+	// reason of the failure. No other adapter may be alive: the library keeps one graphics context
+	std::string check_in_place_updates(const Xray_Beam& beam, const Xray_Detector& detector)
+	{
+		const Xray_Material aluminium{ "Al", 2.699 };
+
+		// a translation of 30 mm along x, in the column-major order of OpenGL
+		const std::array<float, 16> translation{ 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,
+												 0.0f, 0.0f, 1.0f, 0.0f, 30.0f, 0.0f, 0.0f, 1.0f };
+
+		Xray_Beam changed_beam       = beam;
+		changed_beam.energy          = 60.0;
+		changed_beam.source_position = { 0.0, 0.0, -1200.0 };
+
+		Xray_Detector changed_detector = detector;
+		changed_detector.position      = { 0.0, 0.0, 600.0 };
+		changed_detector.pixel_size    = 2.5;
+
+		Xray_Image first;
+		Xray_Image moved;
+		Xray_Image updated;
+		Xray_Image fresh;
+		{
+			Gvxr_Adapter adapter;
+			std::string  error = adapter.initialise(beam, detector);
+			if (error.empty())
+				error = adapter.add_mesh(make_cube("Cube", 100.0f, Xray_Material{ "H2O", 1.0 }));
+			if (error.empty())
+				error = adapter.compute_image(first);
+			if (error.empty())
+				error = adapter.set_mesh_material(0, aluminium);
+			if (error.empty())
+				error = adapter.set_mesh_transform(0, translation);
+			if (error.empty())
+				error = adapter.compute_image(moved);
+			if (error.empty())
+				error = adapter.update_beam(changed_beam);
+			if (error.empty())
+				error = adapter.update_detector(changed_detector);
+			if (error.empty())
+				error = adapter.compute_image(updated);
+			if (!error.empty())
+				return "In place: " + error;
+
+			Xray_Detector other_detector   = detector;
+			other_detector.width_in_pixels = 64;
+			if (adapter.update_detector(other_detector).empty())
+				return "A detector with another number of pixels was accepted in place";
+			if (adapter.set_mesh_transform(1, translation).empty() || adapter.set_mesh_material(1, aluminium).empty())
+				return "A mesh that does not exist was accepted";
+		}
+
+		{ // the same state, built from scratch: an aluminium cube moved 30 mm along x in its positions, and the changed beam and detector
+			Xray_Mesh cube = make_cube("Cube", 100.0f, aluminium);
+			for (std::size_t i = 0; i < cube.positions.size(); i += 3) cube.positions[i] += 30.0f;
+
+			Gvxr_Adapter adapter;
+			std::string  error = adapter.initialise(changed_beam, changed_detector);
+			if (error.empty())
+				error = adapter.add_mesh(cube);
+			if (error.empty())
+				error = adapter.compute_image(fresh);
+			if (!error.empty())
+				return "New adapter: " + error;
+		}
+
+		const auto largest_difference = [](const Xray_Image& a, const Xray_Image& b) {
+			float difference{ 0.0f };
+			for (std::size_t i = 0; i < a.pixels.size() && i < b.pixels.size(); ++i)
+				difference = std::max(difference, std::abs(a.pixels[i] - b.pixels[i]));
+			return difference;
+		};
+		if (first.pixels.size() != moved.pixels.size() || updated.pixels.size() != fresh.pixels.size() || fresh.pixels.empty())
+			return "The images have different sizes";
+
+		const float beam_value       = *std::max_element(fresh.pixels.begin(), fresh.pixels.end());
+		const float first_beam_value = *std::max_element(first.pixels.begin(), first.pixels.end());
+		std::cout << "[INFO::SIMULATOR_GUI::run_xray_self_test] the changes in place differ from a new adapter by "
+				  << largest_difference(updated, fresh) << " (the unattenuated beam is " << beam_value
+				  << "), and the change of the material and of the transform changes the first image by "
+				  << largest_difference(first, moved) << " (the unattenuated beam was " << first_beam_value << ")" << std::endl;
+		if (!(largest_difference(first, moved) > 0.05f * first_beam_value))
+			return "The change of the material and of the transform did not change the image";
+		if (!(largest_difference(updated, fresh) <= 1.0e-3f * beam_value))
+			return "The image updated in place is not the one of a new adapter";
+
+		return "";
+	}
 } // namespace
 #endif
 
@@ -201,8 +291,9 @@ void Simulator_Gui::run_xray_self_test()
 
 	const std::vector<std::pair<std::string, GLint>> state_before = capture_gl_state();
 
-	Gvxr_Adapter adapter;
-	std::string  error = adapter.initialise(beam, detector);
+	auto          adapter_owner = std::make_unique<Gvxr_Adapter>(); // destroyed before the check of the updates in place
+	Gvxr_Adapter& adapter       = *adapter_owner;
+	std::string   error         = adapter.initialise(beam, detector);
 	if (!error.empty())
 	{
 		fail("The adapter could not be initialised: " + error);
@@ -287,11 +378,20 @@ void Simulator_Gui::run_xray_self_test()
 		return;
 	}
 
+	// what the adapter changes in place gives the image of a new adapter (the first adapter goes first: the library keeps one context)
+	adapter_owner.reset();
+	error = check_in_place_updates(beam, detector);
+	if (!error.empty())
+	{
+		fail(error);
+		return;
+	}
+
 	if (is_state_the_same)
 	{
-		std::cout
-			<< "[SUCCESS::SIMULATOR_GUI::run_xray_self_test] The X-ray image of the cube is valid and the state of OpenGL is unchanged"
-			<< std::endl;
+		std::cout << "[SUCCESS::SIMULATOR_GUI::run_xray_self_test] The X-ray image of the cube is valid, the state of OpenGL is unchanged, "
+					 "and the changes in place give the image of a new adapter"
+				  << std::endl;
 	}
 #endif
 }

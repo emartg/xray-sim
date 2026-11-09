@@ -53,11 +53,12 @@ public:
 private:
 	// Private Methods
 	// ---------------
-	// Puts the setup within its limits, creates the adapter again with the beam and the detector of the setup and the meshes of the
-	// scene, and computes the image. The adapter is created again because the library takes its beam and its detector when it is
-	// initialised. Sets the error on failure (and clears it first, so that the user can try again). Measures the time of each stage,
-	// prints it, and counts the images (see get_images_in_last_seconds)
-	void apply_setup();
+	// Puts the setup within its limits and computes the image. The adapter is kept between the images, and the beam and the detector
+	// are updated in place; a new adapter, with the meshes of the scene, is created if there is none, if the last one failed, if the
+	// number of pixels changed (the renderer sized its images for it), or if should_recreate is true. Sets the error on failure (and
+	// clears it first, so that the user can try again). Measures the time of each stage, prints it, and counts the images (see
+	// get_images_in_last_seconds)
+	void apply_setup(bool should_recreate = false);
 
 	// Computes the X-ray image of the scene with the adapter, and measures the time it takes. Sets the error on failure
 	void compute();
@@ -87,7 +88,8 @@ private:
 
 	// Checks the first image of the scene and that the iron sphere attenuates more than the water sphere; then changes the setup (a
 	// lower energy must attenuate more, and another geometry and detector must still give a valid image of the right size) and checks
-	// the images, and restores the setup. Prints the result with the format of the Engine
+	// the images, checks that the update in place gives the image of a new adapter, and restores the setup. Prints the result with the
+	// format of the Engine
 	void check_image();
 
 	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the scene (in centimetres) on the
@@ -109,13 +111,15 @@ private:
 
 	// Times of the last image, in milliseconds (the ones of the adapter are in timings)
 	Xray_Timings timings;
-	double       apply_ms{ 0.0 };          // the whole apply_setup
-	double       adapter_reset_ms{ 0.0 };  // the destruction of the old adapter
-	double       adapter_create_ms{ 0.0 }; // the construction of the new adapter (the objects of the library, before initialise)
-	double       scene_ms{ 0.0 };          // the meshes of the scene in the units of the library
-	double       mirror_ms{ 0.0 };         // the mirror of the image and the search of the reference value
-	double       grey_ms{ 0.0 };           // the conversion to grey values
-	double       upload_ms{ 0.0 };         // the creation of the texture, if it is new, and the copy of the grey values to it
+	double       apply_ms{ 0.0 };               // the whole apply_setup
+	bool         was_updated_in_place{ false }; // true: the last image came from the adapter updated in place, not from a new one
+	double       update_ms{ 0.0 };              // the update of the beam and of the detector in place (0 for a new adapter)
+	double       adapter_reset_ms{ 0.0 };       // the destruction of the old adapter
+	double       adapter_create_ms{ 0.0 };      // the construction of the new adapter (the objects of the library, before initialise)
+	double       scene_ms{ 0.0 };               // the meshes of the scene in the units of the library
+	double       mirror_ms{ 0.0 };              // the mirror of the image and the search of the reference value
+	double       grey_ms{ 0.0 };                // the conversion to grey values
+	double       upload_ms{ 0.0 };              // the creation of the texture, if it is new, and the copy of the grey values to it
 
 	std::vector<std::chrono::steady_clock::time_point> image_times; // when the images of the last few seconds were computed
 	unsigned int                                       most_images_in_last_seconds{ 0 };

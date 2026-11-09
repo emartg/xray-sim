@@ -89,36 +89,71 @@ void Xray_View::draw()
 
 // Private Methods
 // ---------------
-void Xray_View::apply_setup()
+void Xray_View::apply_setup(bool should_recreate)
 {
 	setup.clamp();
+	const bool had_error = !error.empty();
 	error.clear();
 	is_setup_dirty = false;
 
 	const auto apply_start = std::chrono::steady_clock::now();
 
-	// the old adapter is destroyed first: the library keeps one graphics context, which the new adapter registers
-	adapter.reset();
-	adapter_reset_ms        = get_milliseconds_since(apply_start);
-	const auto create_start = std::chrono::steady_clock::now();
-	auto       new_adapter  = std::make_unique<Gvxr_Adapter>();
-	adapter_create_ms       = get_milliseconds_since(create_start);
+	// the adapter is kept: the library takes the beam and the detector in place. A new one is needed if the last one failed, or if the
+	// number of pixels changed (the renderer sized its images for the old number)
+	const bool can_update = adapter && adapter->get_is_initialised() && !had_error && !should_recreate &&
+		setup.width_in_pixels == image_setup.width_in_pixels && setup.height_in_pixels == image_setup.height_in_pixels;
+	was_updated_in_place = false;
+	update_ms            = 0.0;
+	if (can_update)
+	{
+		adapter->reset_timings(); // the times of this image only
+		const auto update_start = std::chrono::steady_clock::now();
+		error                   = adapter->update_beam(setup.make_beam());
+		if (error.empty())
+			error = adapter->update_detector(setup.make_detector());
+		update_ms = get_milliseconds_since(update_start);
 
-	error = new_adapter->initialise(setup.make_beam(), setup.make_detector());
-	if (error.empty())
-	{ // the meshes are uploaded in millimetres, with the transform of each object applied
-		const auto                   scene_start = std::chrono::steady_clock::now();
-		const std::vector<Xray_Mesh> meshes      = scene->make_xray_meshes();
-		scene_ms                                 = get_milliseconds_since(scene_start);
-		for (const Xray_Mesh& mesh : meshes)
+		if (error.empty())
 		{
-			error = new_adapter->add_mesh(mesh);
-			if (!error.empty())
-				break;
+			was_updated_in_place = true;
+			adapter_reset_ms     = 0.0;
+			adapter_create_ms    = 0.0;
+			scene_ms             = 0.0;
+		}
+		else
+		{ // the controls keep working: a new adapter takes the setup
+			std::cerr << "[WARNING::XRAY_VIEW::apply_setup] The adapter could not be updated (" << error << "), a new one is created"
+					  << std::endl;
+			error.clear();
+			update_ms = 0.0;
 		}
 	}
 
-	adapter     = std::move(new_adapter); // kept even after a failure, so that the initialisation is not tried again every frame
+	if (!was_updated_in_place)
+	{
+		// the old adapter is destroyed first: the library keeps one graphics context, which the new adapter registers
+		adapter.reset();
+		adapter_reset_ms        = get_milliseconds_since(apply_start);
+		const auto create_start = std::chrono::steady_clock::now();
+		auto       new_adapter  = std::make_unique<Gvxr_Adapter>();
+		adapter_create_ms       = get_milliseconds_since(create_start);
+
+		error = new_adapter->initialise(setup.make_beam(), setup.make_detector());
+		if (error.empty())
+		{ // the meshes are uploaded in millimetres, with the transform of each object applied
+			const auto                   scene_start = std::chrono::steady_clock::now();
+			const std::vector<Xray_Mesh> meshes      = scene->make_xray_meshes();
+			scene_ms                                 = get_milliseconds_since(scene_start);
+			for (const Xray_Mesh& mesh : meshes)
+			{
+				error = new_adapter->add_mesh(mesh);
+				if (!error.empty())
+					break;
+			}
+		}
+
+		adapter = std::move(new_adapter); // kept even after a failure, so that the initialisation is not tried again every frame
+	}
 	image_setup = setup;
 
 	if (!error.empty())
@@ -136,12 +171,21 @@ void Xray_View::apply_setup()
 	if (!is_console_output_enabled)
 		return;
 	std::cout << "[INFO::XRAY_VIEW::apply_setup] " << image.width << " by " << image.height << " pixels, " << timings.mesh_count
-			  << " meshes: total " << apply_ms << " ms; destroy the adapter " << adapter_reset_ms << ", create the adapter "
-			  << adapter_create_ms << ", initialise " << timings.initialise_ms << " (GLEW " << timings.glew_ms << ", renderer "
-			  << timings.renderer_initialise_ms << ") + scene " << scene_ms << ", add meshes " << timings.add_meshes_ms << ", compute call "
-			  << compute_time_ms << " (computation " << timings.computation_ms << ", read-back " << timings.read_back_ms << "), mirror "
-			  << mirror_ms << "; state guard " << timings.guard_ms << " ms in all the calls; images in the last " << IMAGE_COUNT_SECONDS
-			  << " seconds: " << get_images_in_last_seconds() << std::endl;
+			  << " meshes: total " << apply_ms << " ms; ";
+	if (was_updated_in_place)
+	{
+		std::cout << "the adapter updated in place " << update_ms;
+	}
+	else
+	{
+		std::cout << "destroy the adapter " << adapter_reset_ms << ", create the adapter " << adapter_create_ms << ", initialise "
+				  << timings.initialise_ms << " (GLEW " << timings.glew_ms << ", renderer " << timings.renderer_initialise_ms
+				  << ") + scene " << scene_ms << ", add meshes " << timings.add_meshes_ms;
+	}
+	std::cout << ", compute call " << compute_time_ms << " (computation " << timings.computation_ms << ", read-back "
+			  << timings.read_back_ms << "), mirror " << mirror_ms << "; state guard " << timings.guard_ms
+			  << " ms in all the calls; images in the last " << IMAGE_COUNT_SECONDS << " seconds: " << get_images_in_last_seconds()
+			  << std::endl;
 }
 
 void Xray_View::compute()
@@ -334,16 +378,27 @@ void Xray_View::draw_setup_window()
 	ImGui::Separator();
 	if (is_image_valid)
 	{
-		ImGui::TextWrapped("Last image: %.1f ms in all, %u meshes", apply_ms, timings.mesh_count);
 		ImGui::TextWrapped(
-			"Destroy %.1f, create %.1f, initialise %.1f (GLEW %.1f, renderer %.1f), scene %.1f, add meshes %.1f",
-			adapter_reset_ms,
-			adapter_create_ms,
-			timings.initialise_ms,
-			timings.glew_ms,
-			timings.renderer_initialise_ms,
-			scene_ms,
-			timings.add_meshes_ms);
+			"Last image: %.1f ms in all, %u meshes, %s",
+			apply_ms,
+			timings.mesh_count,
+			was_updated_in_place ? "the adapter updated in place" : "a new adapter");
+		if (was_updated_in_place)
+		{
+			ImGui::TextWrapped("Update of the beam and the detector %.1f", update_ms);
+		}
+		else
+		{
+			ImGui::TextWrapped(
+				"Destroy %.1f, create %.1f, initialise %.1f (GLEW %.1f, renderer %.1f), scene %.1f, add meshes %.1f",
+				adapter_reset_ms,
+				adapter_create_ms,
+				timings.initialise_ms,
+				timings.glew_ms,
+				timings.renderer_initialise_ms,
+				scene_ms,
+				timings.add_meshes_ms);
+		}
 		ImGui::TextWrapped(
 			"Computation %.1f, read-back %.1f, mirror %.1f, grey %.1f, texture %.1f",
 			timings.computation_ms,
@@ -575,6 +630,42 @@ void Xray_View::check_image()
 		return;
 	}
 
+	// the update in place gives the image of a new adapter: the same geometry, with the same number of pixels, once in place and once
+	// with a new adapter (the setup of the start has the number of pixels of the adapter that the last change created)
+	setup = original;
+	apply_setup(true);
+	setup.source_distance   = 150.0f;
+	setup.detector_distance = 100.0f;
+	setup.pixel_size        = 3.0f;
+	apply_setup();
+	if (!was_updated_in_place)
+	{
+		fail("A change of the geometry with the same number of pixels did not update the adapter in place");
+		return;
+	}
+	const Xray_Image in_place_image = image;
+	apply_setup(true);
+	if (was_updated_in_place || !is_image_valid)
+	{
+		fail("The new adapter was not created, or its image is not valid");
+		return;
+	}
+	if (in_place_image.width != image.width || in_place_image.height != image.height)
+	{
+		fail("The image updated in place and the one of a new adapter have different sizes");
+		return;
+	}
+	float largest_difference{ 0.0f };
+	for (std::size_t i = 0; i < image.pixels.size(); ++i)
+		largest_difference = std::max(largest_difference, std::abs(in_place_image.pixels[i] - image.pixels[i]));
+	std::cout << "[INFO::XRAY_VIEW::check_image] the image updated in place differs from the one of a new adapter by " << largest_difference
+			  << " (the unattenuated beam is " << reference << ")" << std::endl;
+	if (!(largest_difference <= 1.0e-3f * reference))
+	{
+		fail("The image updated in place is not the one of a new adapter");
+		return;
+	}
+
 	// the setup of the start again (it also checks that the image comes back)
 	setup = original;
 	apply_setup();
@@ -587,7 +678,7 @@ void Xray_View::check_image()
 		return;
 	}
 
-	std::cout << "[SUCCESS::XRAY_VIEW::check_image] The X-ray images of the scene are valid, each object attenuates the beam, and the "
-				 "changes of the setup take effect"
+	std::cout << "[SUCCESS::XRAY_VIEW::check_image] The X-ray images of the scene are valid, each object attenuates the beam, the "
+				 "changes of the setup take effect, and the update in place gives the image of a new adapter"
 			  << std::endl;
 }

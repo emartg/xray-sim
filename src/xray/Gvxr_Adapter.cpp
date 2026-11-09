@@ -14,11 +14,13 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "gVirtualXRay/Context.h"
 #include "gVirtualXRay/Mixture.h"
 #include "gVirtualXRay/PolygonMesh.h"
+#include "gVirtualXRay/SceneGraphNode.h"
 #include "gVirtualXRay/ResourceManager.h"
 #include "gVirtualXRay/Units.h"
 #include "gVirtualXRay/XRayBeam.h"
@@ -204,6 +206,30 @@ namespace
 		GLint     pack_alignment{ 4 }, unpack_alignment{ 4 };
 	};
 
+	// The numbers of the library are single-precision floats, and its unit of length is set by the factor mm
+	gVirtualXRay::RATIONAL_NUMBER to_number(double value)
+	{
+		return static_cast<gVirtualXRay::RATIONAL_NUMBER>(value * gVirtualXRay::mm);
+	}
+
+	gVirtualXRay::VEC3 to_vector(const std::array<double, 3>& array)
+	{
+		return gVirtualXRay::VEC3{ to_number(array[0]), to_number(array[1]), to_number(array[2]) };
+	}
+
+	// Sets the point source and the energy channel of the beam of the library: the position of the source is held by the detector
+	// object, and the beam has only the energy and the number of photons. Returns an empty string, or the reason of the failure
+	std::string set_beam(gVirtualXRay::XRayDetector& detector, gVirtualXRay::XRayBeam& library_beam, const Xray_Beam& beam)
+	{
+		detector.setXrayPointSource(to_vector(beam.source_position));
+		library_beam.clear();
+		if (!library_beam.addChannelPerPixelAtSDD(beam.photons_per_pixel, beam.energy * gVirtualXRay::keV))
+		{
+			return "The beam has an invalid energy or number of photons";
+		}
+		return "";
+	}
+
 	// Returns the description of an exception that was thrown by the library or by the standard library
 	std::string describe_current_exception()
 	{
@@ -230,9 +256,11 @@ struct Gvxr_Adapter::Implementation
 	gVirtualXRay::XRayBeam     beam;
 	gVirtualXRay::XRayRenderer renderer;
 	std::vector<std::unique_ptr<gVirtualXRay::PolygonMesh>> meshes;
-	unsigned int                                            width{ 0 }, height{ 0 };
-	bool                                                    is_initialised{ false };
-	Xray_Timings                                            timings;
+	std::vector<std::unique_ptr<gVirtualXRay::SceneGraphNode>>
+				 nodes; // one per mesh, in the same order: the transform of a mesh is its node's
+	unsigned int width{ 0 }, height{ 0 };
+	bool         is_initialised{ false };
+	Xray_Timings timings;
 };
 
 // Constructors
@@ -249,8 +277,9 @@ Gvxr_Adapter::~Gvxr_Adapter()
 		{
 			double         guard_ms{ 0.0 };   // the time of the release is not reported
 			Gl_State_Guard guard{ guard_ms }; // the release of the renderer changes the state of OpenGL
-			implementation->meshes.clear();
 			implementation->renderer.release();
+			implementation->nodes.clear(); // the nodes point to the meshes
+			implementation->meshes.clear();
 			implementation->context.release(); // the context is the Engine's: only what the library holds is freed
 			gVirtualXRay::ResourceManager::getInstance().setGraphicsContext(nullptr);
 		}
@@ -313,14 +342,6 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 			return "The detector has no pixels, or a pixel has no size";
 		}
 
-		// the numbers of the library are single-precision floats
-		const auto to_number = [](double value) {
-			return static_cast<gVirtualXRay::RATIONAL_NUMBER>(value * gVirtualXRay::mm);
-		};
-		const auto to_vector = [&to_number](const std::array<double, 3>& array) {
-			return gVirtualXRay::VEC3{ to_number(array[0]), to_number(array[1]), to_number(array[2]) };
-		};
-
 		// the point source and the flat detector
 		implementation->detector.setXrayPointSource(to_vector(beam.source_position));
 		implementation->detector.setDetectorPosition(to_vector(detector.position));
@@ -332,10 +353,9 @@ std::string Gvxr_Adapter::initialise(const Xray_Beam& beam, const Xray_Detector&
 		implementation->height = detector.height_in_pixels;
 
 		// the monochromatic beam
-		implementation->beam.clear();
-		if (!implementation->beam.addChannelPerPixelAtSDD(beam.photons_per_pixel, beam.energy * gVirtualXRay::keV))
+		if (const std::string reason = set_beam(implementation->detector, implementation->beam, beam); !reason.empty())
 		{
-			return "The beam has an invalid energy or number of photons";
+			return reason;
 		}
 
 		Gl_State_Guard guard{ implementation->timings.guard_ms }; // the initialisation of the renderer creates framebuffers and textures
@@ -396,9 +416,16 @@ std::string Gvxr_Adapter::add_mesh(const Xray_Mesh& mesh)
 		polygon_mesh->setCompound(mesh.material.compound);
 		polygon_mesh->setDensity(mesh.material.density * gVirtualXRay::g / gVirtualXRay::cm3);
 
-		implementation->renderer.addInnerSurface(polygon_mesh.get());
+		// the renderer takes the object through a node that the adapter owns, so that the transform of the object can change
+		// later without rebuilding the mesh (with a bare mesh, the library wraps it in a node that the adapter cannot reach)
+		auto node = std::make_unique<gVirtualXRay::SceneGraphNode>(mesh.name);
+		node->setGeometry(polygon_mesh.get());
+		const gVirtualXRay::SceneGraphNode* const constant_node = node.get();
+
+		implementation->renderer.addInnerSurface(constant_node);
 		implementation->renderer.needUpdateSurfacePerMaterial();
 		implementation->meshes.push_back(std::move(polygon_mesh));
+		implementation->nodes.push_back(std::move(node));
 		++implementation->timings.mesh_count;
 	}
 	catch (...)
@@ -407,6 +434,112 @@ std::string Gvxr_Adapter::add_mesh(const Xray_Mesh& mesh)
 	}
 
 	return "";
+}
+
+std::string Gvxr_Adapter::update_beam(const Xray_Beam& beam)
+{
+	if (!implementation->is_initialised)
+	{
+		return "The adapter is not initialised";
+	}
+
+	const Scoped_Timer update_timer{ implementation->timings.update_ms };
+	try
+	{
+		return set_beam(implementation->detector, implementation->beam, beam);
+	}
+	catch (...)
+	{
+		return describe_current_exception();
+	}
+}
+
+std::string Gvxr_Adapter::update_detector(const Xray_Detector& detector)
+{
+	if (!implementation->is_initialised)
+	{
+		return "The adapter is not initialised";
+	}
+	if (detector.width_in_pixels != implementation->width || detector.height_in_pixels != implementation->height)
+	{
+		return "The number of pixels of the detector changed: the renderer sized its images for the old one, so a new adapter is needed";
+	}
+	if (!(detector.pixel_size > 0.0))
+	{
+		return "A pixel of the detector has no size";
+	}
+
+	const Scoped_Timer update_timer{ implementation->timings.update_ms };
+	try
+	{
+		implementation->detector.setDetectorPosition(to_vector(detector.position));
+		implementation->detector.setUpVector(to_vector(detector.up_vector).normal());
+		implementation->detector.setResolutionInUnitsOfLengthPerPixel(
+			gVirtualXRay::VEC2{ to_number(detector.pixel_size), to_number(detector.pixel_size) });
+	}
+	catch (...)
+	{
+		return describe_current_exception();
+	}
+
+	return "";
+}
+
+std::string Gvxr_Adapter::set_mesh_transform(std::size_t index, const std::array<float, 16>& matrix)
+{
+	if (index >= implementation->nodes.size())
+	{
+		return "There is no mesh " + std::to_string(index);
+	}
+
+	// the library reads 16 numbers of its own type: the array is copied as it is, which needs the same type
+	static_assert(std::is_same_v<gVirtualXRay::RATIONAL_NUMBER, float>, "The matrix is given to the library as floats");
+
+	const Scoped_Timer update_timer{ implementation->timings.update_ms };
+	try
+	{
+		implementation->nodes[index]->setLocalTransformation(gVirtualXRay::MATRIX4{ matrix.data() });
+	}
+	catch (...)
+	{
+		return describe_current_exception();
+	}
+
+	return "";
+}
+
+std::string Gvxr_Adapter::set_mesh_material(std::size_t index, const Xray_Material& material)
+{
+	if (index >= implementation->meshes.size())
+	{
+		return "There is no mesh " + std::to_string(index);
+	}
+
+	const Scoped_Timer update_timer{ implementation->timings.update_ms };
+	try
+	{
+		implementation->meshes[index]->setCompound(material.compound);
+		implementation->meshes[index]->setDensity(material.density * gVirtualXRay::g / gVirtualXRay::cm3);
+		implementation->renderer.needUpdateSurfacePerMaterial(); // the renderer groups the meshes by material
+	}
+	catch (...)
+	{
+		return describe_current_exception();
+	}
+
+	return "";
+}
+
+void Gvxr_Adapter::reset_timings()
+{
+	Xray_Timings& timings = implementation->timings;
+
+	timings.guard_ms               = 0.0;
+	timings.initialise_ms          = 0.0;
+	timings.glew_ms                = 0.0;
+	timings.renderer_initialise_ms = 0.0;
+	timings.add_meshes_ms          = 0.0;
+	timings.update_ms              = 0.0;
 }
 
 std::string Gvxr_Adapter::compute_image(Xray_Image& image)
