@@ -1,9 +1,9 @@
 /*
  * Scene_Test.cpp
  * This file is the test of the scene library: the shapes (closed surfaces with outward triangles and the volume they
- * should have), the table of materials, and the default scene with its conversion to X-ray meshes (the units and the
- * transforms). It needs no OpenGL context. It returns an error code if a check fails, and prints each failure with the
- * format of the Engine's messages.
+ * should have), the table of materials, the default scene with its conversion to X-ray meshes (the units and the
+ * transforms), and the changes that the panel makes (a material, a removal). It needs no OpenGL context. It returns an
+ * error code if a check fails, and prints each failure with the format of the Engine's messages.
  */
 
 #include <array>
@@ -185,6 +185,46 @@ namespace
 				"scene: the X-ray material of " + object.name + " is wrong");
 		}
 	}
+
+	// Checks the changes of the scene that the panel makes: the material of an object, and the removal of an object
+	void test_scene_changes()
+	{
+		Scene scene = Scene::make_default_scene();
+		check(scene.get_revision() > 0, "changes: a scene with objects should have a revision above zero");
+
+		const std::size_t aluminium = Scene_Material_Table::find("Aluminium");
+		check(aluminium < Scene_Material_Table::get_materials().size(), "changes: the table should have aluminium");
+
+		// a new material changes the object, the revision, and the X-ray mesh
+		std::uint64_t revision = scene.get_revision();
+		check(scene.set_object_material(0, aluminium), "changes: a valid change of material should succeed");
+		check(scene.get_objects()[0].material_index == aluminium, "changes: the object should have the new material");
+		check(scene.get_revision() > revision, "changes: a change of material should raise the revision");
+		check(
+			scene.make_xray_meshes()[0].material.compound == Scene_Material_Table::get_materials()[aluminium].xray.compound,
+			"changes: the X-ray mesh should take the new material");
+
+		// an object or a material that does not exist changes nothing
+		revision                        = scene.get_revision();
+		const std::size_t material_here = scene.get_objects()[1].material_index;
+		check(!scene.set_object_material(99, aluminium), "changes: a material of an object that does not exist should be refused");
+		check(
+			!scene.set_object_material(1, Scene_Material_Table::get_materials().size()),
+			"changes: a material that does not exist should be refused");
+		check(scene.get_objects()[1].material_index == material_here, "changes: a refused change should change nothing");
+		check(scene.get_revision() == revision, "changes: a refused change should not raise the revision");
+
+		// the removal moves the other objects down
+		const std::string second_name = scene.get_objects()[1].name;
+		const std::size_t count       = scene.get_objects().size();
+		check(scene.remove_object(0), "changes: removing an object should succeed");
+		check(scene.get_objects().size() == count - 1, "changes: the scene should have one object less");
+		check(scene.get_objects()[0].name == second_name, "changes: the next object should take the place of the removed one");
+		check(scene.get_revision() > revision, "changes: a removal should raise the revision");
+		revision = scene.get_revision();
+		check(!scene.remove_object(count), "changes: removing an object that does not exist should be refused");
+		check(scene.get_revision() == revision, "changes: a refused removal should not raise the revision");
+	}
 } // namespace
 
 int main()
@@ -192,6 +232,7 @@ int main()
 	test_shapes();
 	test_materials();
 	test_default_scene();
+	test_scene_changes();
 
 	if (failures != 0)
 	{
@@ -199,6 +240,7 @@ int main()
 		return 1;
 	}
 
-	std::cout << "[SUCCESS::SCENE_TEST::main] The shapes, the materials, and the default scene are valid" << std::endl;
+	std::cout << "[SUCCESS::SCENE_TEST::main] The shapes, the materials, the default scene, and the changes of the scene are valid"
+			  << std::endl;
 	return 0;
 }

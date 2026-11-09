@@ -11,6 +11,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -54,7 +55,13 @@ public:
 	// Public Methods
 	// --------------
 	// Adds an object to the scene
-	void add_object(Scene_Object object) { objects.push_back(std::move(object)); }
+	void add_object(Scene_Object object);
+
+	// Changes the material of an object. Returns false, and changes nothing, if the object or the material does not exist
+	bool set_object_material(std::size_t object_index, std::size_t material_index);
+
+	// Removes an object (the ones after it move one place down). Returns false, and changes nothing, if it does not exist
+	bool remove_object(std::size_t object_index);
 
 	// Returns the triangle meshes of the objects for the X-ray library, in millimetres, with the transform of each
 	// object applied to its vertices and the X-ray material of its material
@@ -63,8 +70,12 @@ public:
 	// Getters
 	const std::vector<Scene_Object>& get_objects() const { return objects; }
 
+	// Returns a number that grows with every change of the scene, so that the views know that they have to look at it again
+	std::uint64_t get_revision() const { return revision; }
+
 private:
 	// Private Attributes
 	// ------------------
 	std::vector<Scene_Object> objects;
+	std::uint64_t             revision{ 0 };
 };

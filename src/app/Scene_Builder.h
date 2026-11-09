@@ -7,6 +7,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <vector>
+
 #include "scene/Scene.h"
 
 class Core;
@@ -17,6 +20,7 @@ public:
 	// Public Static Methods
 	// ---------------------
 	// Creates the camera (looking at the objects from the front and above), a directional light, and a node for each
-	// object of the scene, and adds them to the Engine. The Engine has to be initialised
-	static void build(const Scene& scene, Core* engine);
+	// object of the scene, and adds them to the Engine. The Engine has to be initialised. Returns the id of the node of each object, in
+	// the order of the objects of the scene (the camera and the light have ids too, and are not in the list)
+	static std::vector<std::uint32_t> build(const Scene& scene, Core* engine);
 };

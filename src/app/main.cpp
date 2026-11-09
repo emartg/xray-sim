@@ -87,11 +87,13 @@ int main(int argc, char** argv)
 	Core* engine = Core::get_instance(); // retrieve the singleton instance of the Core class
 
 	// the scene that the simulator shows, drawn by the Engine and imaged by the X-ray library
-	const auto scene = std::make_shared<const Scene>(Scene::make_default_scene());
+	const auto scene = std::make_shared<Scene>(Scene::make_default_scene());
 
-	// create a GLFW_Renderer instance with the simulator's GUI, and set it as the renderer for the engine
+	// create a GLFW_Renderer instance with the simulator's GUI, and set it as the renderer for the engine (the renderer owns the GUI)
 	GLFW_Renderer* renderer = new GLFW_Renderer();
-	renderer->set_gui_layer(std::make_unique<Simulator_Gui>(scene, xray_self_test, xray_view_test));
+	auto           gui      = std::make_unique<Simulator_Gui>(scene, xray_self_test, xray_view_test);
+	Simulator_Gui* gui_view = gui.get();
+	renderer->set_gui_layer(std::move(gui));
 	engine->set_renderer(renderer);
 
 	if (!engine->init())
@@ -101,7 +103,8 @@ int main(int argc, char** argv)
 	}
 
 	// fill the Engine's scene with the camera, the light, and the shapes of the scene
-	Scene_Builder::build(*scene, engine);
+	// and tell the GUI which node is which object
+	gui_view->set_node_ids(Scene_Builder::build(*scene, engine));
 
 	engine->run(max_frames); // run the main loop of the engine (0 means until the window is closed)
 	engine->shutdown();      // clean up resources in the correct order and shut down the engine

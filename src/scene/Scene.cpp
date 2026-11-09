@@ -92,6 +92,32 @@ Scene Scene::make_default_scene()
 
 // Public Methods
 // --------------
+void Scene::add_object(Scene_Object object)
+{
+	objects.push_back(std::move(object));
+	++revision;
+}
+
+bool Scene::set_object_material(std::size_t object_index, std::size_t material_index)
+{
+	if (object_index >= objects.size() || material_index >= Scene_Material_Table::get_materials().size())
+		return false;
+
+	objects[object_index].material_index = material_index;
+	++revision;
+	return true;
+}
+
+bool Scene::remove_object(std::size_t object_index)
+{
+	if (object_index >= objects.size())
+		return false;
+
+	objects.erase(objects.begin() + static_cast<std::ptrdiff_t>(object_index));
+	++revision;
+	return true;
+}
+
 std::vector<Xray_Mesh> Scene::make_xray_meshes() const
 {
 	std::vector<Xray_Mesh> meshes;
