@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cfloat>
 #include <cmath>
 #include <iostream>
 #include <utility>
@@ -25,6 +26,15 @@ namespace
 	{
 		return static_cast<ImTextureID>(texture);
 	}
+
+	// The steps of the drag fields per pixel of the mouse: 1 mm for the lengths and 0.2 degrees for the angles
+	constexpr float POSITION_DRAG_SPEED{ 0.1f }; // in centimetres
+	constexpr float ANGLE_DRAG_SPEED{ 0.2f };    // in degrees
+
+	// The smallest size of the X-ray window outside of the single view, so that a smaller size stored by ImGui (the single view makes the
+	// window short, and ImGui keeps the size of a window for the next start in its file imgui.ini) cannot leave the image without room
+	constexpr float MIN_WINDOW_WIDTH{ 420.0f };
+	constexpr float MIN_WINDOW_HEIGHT{ 330.0f };
 
 	// The images that are counted are the ones of the last seconds (an image takes more than a second, so a shorter period would count
 	// none)
@@ -299,14 +309,20 @@ std::string Xray_View::find_geometry_problem(const Xray_Setup& setup_to_check) c
 	if (!scene)
 		return "";
 
-	// the source, and the centre of the detector, which follows the beam
+	// the source, and the whole detector plate, which follows the beam
 	const Scene_Object* source_object = scene->find_object_around_point(setup_to_check.source_position);
 	if (source_object)
 		return "the source is inside '" + source_object->name + "'";
 
-	const Scene_Object* detector_object = scene->find_object_around_point(setup_to_check.get_detector_position());
+	const std::array<float, 2> size            = setup_to_check.get_detector_size();
+	const Scene_Object*        detector_object = scene->find_object_touching_rectangle(
+		setup_to_check.get_detector_position(),
+		setup_to_check.get_detector_right(),
+		setup_to_check.get_detector_up(),
+		size[0] / 2.0f,
+		size[1] / 2.0f);
 	if (detector_object)
-		return "the centre of the detector is inside '" + detector_object->name + "'";
+		return "the detector passes through '" + detector_object->name + "'";
 
 	return "";
 }
@@ -442,28 +458,40 @@ void Xray_View::draw_setup_window()
 
 
 	// the tube is free: its position, where it points (yaw about the axis y, pitch towards +y), and the detector, which follows the beam
-	// at a distance of the source and is turned about the beam by the roll
-	is_changed |= ImGui::SliderFloat3(
+	// at a distance of the source and is turned about the beam by the roll. They are drag fields with a fine step per pixel (Shift drags
+	// 10 times faster, Alt 100 times slower, and a double click or Ctrl+click types a value), so that a threshold can be reached exactly
+	is_changed |= ImGui::DragFloat3(
 		"Source position (cm)",
 		setup.source_position.data(),
+		POSITION_DRAG_SPEED,
 		Xray_Setup::MIN_SOURCE_POSITION,
 		Xray_Setup::MAX_SOURCE_POSITION,
-		"%.0f",
+		"%.1f",
 		clamp_flag);
-	is_changed |= ImGui::SliderFloat("Yaw (degrees)", &setup.yaw, Xray_Setup::MIN_YAW, Xray_Setup::MAX_YAW, "%.0f", clamp_flag);
-	is_changed |= ImGui::SliderFloat("Pitch (degrees)", &setup.pitch, Xray_Setup::MIN_PITCH, Xray_Setup::MAX_PITCH, "%.0f", clamp_flag);
-	is_changed |= ImGui::SliderFloat("Roll (degrees)", &setup.roll, Xray_Setup::MIN_ROLL, Xray_Setup::MAX_ROLL, "%.0f", clamp_flag);
+	is_changed |=
+		ImGui::DragFloat("Yaw (degrees)", &setup.yaw, ANGLE_DRAG_SPEED, Xray_Setup::MIN_YAW, Xray_Setup::MAX_YAW, "%.1f", clamp_flag);
+	is_changed |= ImGui::DragFloat(
+		"Pitch (degrees)",
+		&setup.pitch,
+		ANGLE_DRAG_SPEED,
+		Xray_Setup::MIN_PITCH,
+		Xray_Setup::MAX_PITCH,
+		"%.1f",
+		clamp_flag);
+	is_changed |=
+		ImGui::DragFloat("Roll (degrees)", &setup.roll, ANGLE_DRAG_SPEED, Xray_Setup::MIN_ROLL, Xray_Setup::MAX_ROLL, "%.1f", clamp_flag);
 	if (ImGui::Button("Aim at the centre of the scene"))
 	{ // the yaw and the pitch that point the beam at the origin from where the source is
 		setup.aim_at({ 0.0f, 0.0f, 0.0f });
 		is_changed = true;
 	}
-	is_changed |= ImGui::SliderFloat(
+	is_changed |= ImGui::DragFloat(
 		"Source to detector (cm)",
 		&setup.source_detector_distance,
+		POSITION_DRAG_SPEED,
 		Xray_Setup::MIN_SOURCE_DETECTOR_DISTANCE,
 		Xray_Setup::MAX_SOURCE_DETECTOR_DISTANCE,
-		"%.0f",
+		"%.1f",
 		clamp_flag);
 	is_changed |= ImGui::SliderFloat(
 		"Pixel size (mm)",
@@ -498,10 +526,14 @@ void Xray_View::draw_setup_window()
 	}
 	else
 	{
-		ImGui::TextWrapped(
+		// in the colour of the other warnings (the wrap position of 0 is the edge of the content region)
+		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextColored(
+			ImVec4{ 1.0f, 0.75f, 0.3f, 1.0f },
 			"The centre of the scene is behind the source, detector %.0f x %.0f mm",
 			setup.width_in_pixels * setup.pixel_size,
 			setup.height_in_pixels * setup.pixel_size);
+		ImGui::PopTextWrapPos();
 	}
 
 	ImGui::Checkbox("Recompute on change", &is_auto_recompute);
@@ -572,6 +604,8 @@ void Xray_View::draw_window()
 	// the window has room for the image, or only for the controls in the single view, and is resized when the view changes
 	const ImVec2 size{ 560.0f, is_single_view ? 140.0f : 380.0f };
 	ImGui::SetNextWindowSize(size, is_single_view != was_single_view ? ImGuiCond_Always : ImGuiCond_FirstUseEver);
+	if (!is_single_view)
+		ImGui::SetNextWindowSizeConstraints(ImVec2{ MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT }, ImVec2{ FLT_MAX, FLT_MAX });
 	was_single_view = is_single_view;
 	ImGui::Begin("X-ray");
 

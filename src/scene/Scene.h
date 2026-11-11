@@ -92,6 +92,15 @@ public:
 	// largest scale) contains the point, in centimetres, or null if there is none. The tube must stay outside of the objects
 	const Scene_Object* find_object_around_point(const std::array<float, 3>& point) const;
 
+	// Returns the first object whose bounding sphere touches a rectangle (the detector plate), or null if there is none. The rectangle
+	// is given by its centre, two perpendicular unit vectors along its sides, and its half width and half height, in centimetres
+	const Scene_Object* find_object_touching_rectangle(
+		const std::array<float, 3>& centre,
+		const std::array<float, 3>& right,
+		const std::array<float, 3>& up,
+		float                       half_width,
+		float                       half_height) const;
+
 	// Getters
 	const std::vector<Scene_Object>& get_objects() const { return objects; }
 

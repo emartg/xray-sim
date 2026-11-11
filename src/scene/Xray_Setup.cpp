@@ -33,12 +33,6 @@ namespace
 		return { vector.x, vector.y, vector.z };
 	}
 
-	// The right of the image as the simulator shows it (seen from the detector towards the source): up x direction, which is +x of the
-	// scene for the default angles
-	glm::vec3 get_image_right(const Xray_Setup& setup)
-	{
-		return glm::cross(to_vector(setup.get_detector_up()), to_vector(setup.get_direction()));
-	}
 } // namespace
 
 // Public Methods
@@ -99,6 +93,19 @@ std::array<float, 3> Xray_Setup::get_detector_up() const
 	return to_array(glm::normalize(up * std::cos(roll_in_radians) + glm::cross(direction, up) * std::sin(roll_in_radians)));
 }
 
+std::array<float, 3> Xray_Setup::get_detector_right() const
+{
+	// up x direction: the right of the image seen from the detector towards the source
+	return to_array(glm::normalize(glm::cross(to_vector(get_detector_up()), to_vector(get_direction()))));
+}
+
+std::array<float, 2> Xray_Setup::get_detector_size() const
+{
+	const float millimetres_per_centimetre = static_cast<float>(MILLIMETRES_PER_CENTIMETRE);
+	return { static_cast<float>(width_in_pixels) * pixel_size / millimetres_per_centimetre,
+			 static_cast<float>(height_in_pixels) * pixel_size / millimetres_per_centimetre };
+}
+
 bool Xray_Setup::project(const std::array<float, 3>& point, double& x_on_detector, double& y_on_detector) const
 {
 	const glm::vec3 direction = to_vector(get_direction());
@@ -109,7 +116,7 @@ bool Xray_Setup::project(const std::array<float, 3>& point, double& x_on_detecto
 
 	// the ray from the source through the point meets the plane of the detector at the source-to-detector distance along the beam
 	const glm::vec3 on_detector = to_point * (source_detector_distance / depth) - direction * source_detector_distance;
-	x_on_detector               = static_cast<double>(glm::dot(on_detector, get_image_right(*this))) * MILLIMETRES_PER_CENTIMETRE;
+	x_on_detector               = static_cast<double>(glm::dot(on_detector, to_vector(get_detector_right()))) * MILLIMETRES_PER_CENTIMETRE;
 	y_on_detector               = static_cast<double>(glm::dot(on_detector, to_vector(get_detector_up()))) * MILLIMETRES_PER_CENTIMETRE;
 	return true;
 }

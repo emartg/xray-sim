@@ -52,6 +52,8 @@ namespace
 		check(setup.get_direction() == std::array<float, 3>{ 0.0f, 0.0f, 1.0f }, "the default beam runs along +z");
 		check(setup.get_detector_position() == std::array<float, 3>{ 0.0f, 0.0f, 50.0f }, "the default detector is at z = +50 cm");
 		check(setup.get_detector_up() == std::array<float, 3>{ 0.0f, 1.0f, 0.0f }, "the default up vector is y");
+		check(is_near(setup.get_detector_right(), { 1.0f, 0.0f, 0.0f }), "the default right of the image is +x");
+		check(setup.get_detector_size() == std::array<float, 2>{ 51.2f, 25.6f }, "the default detector is 51.2 by 25.6 cm");
 
 		const Xray_Beam beam = setup.make_beam();
 		check(is_near(beam.energy, 80.0), "the beam has the energy of the setup");
@@ -126,6 +128,11 @@ namespace
 		check(is_near(dot(direction, direction), 1.0, 1e-5), "the direction is a unit vector");
 		check(is_near(dot(up, up), 1.0, 1e-5), "the up vector is a unit vector");
 		check(is_near(dot(up, direction), 0.0, 1e-5), "the up vector is perpendicular to the beam");
+		const std::array<float, 3> right = setup.get_detector_right();
+		check(is_near(dot(right, right), 1.0, 1e-5), "the right vector is a unit vector");
+		check(
+			is_near(dot(right, direction), 0.0, 1e-5) && is_near(dot(right, up), 0.0, 1e-5),
+			"the right vector is perpendicular to the beam and to up");
 		check(
 			is_near(centre, { 40.0f + 200.0f * direction[0], 25.0f + 200.0f * direction[1], -80.0f + 200.0f * direction[2] }, 1e-3),
 			"the centre of the detector is on the axis of the beam, at the source-to-detector distance");
