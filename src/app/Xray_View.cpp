@@ -299,12 +299,12 @@ std::string Xray_View::find_geometry_problem(const Xray_Setup& setup_to_check) c
 	if (!scene)
 		return "";
 
-	// the source and the detector are on the axis z, at the distances of the setup
-	const Scene_Object* source_object = scene->find_object_around_point({ 0.0f, 0.0f, -setup_to_check.source_distance });
+	// the source, and the centre of the detector, which follows the beam
+	const Scene_Object* source_object = scene->find_object_around_point(setup_to_check.source_position);
 	if (source_object)
 		return "the source is inside '" + source_object->name + "'";
 
-	const Scene_Object* detector_object = scene->find_object_around_point({ 0.0f, 0.0f, setup_to_check.detector_distance });
+	const Scene_Object* detector_object = scene->find_object_around_point(setup_to_check.get_detector_position());
 	if (detector_object)
 		return "the centre of the detector is inside '" + detector_object->name + "'";
 
@@ -432,25 +432,37 @@ void Xray_View::draw_setup_window()
 	// the window is under the X-ray window, at the right of the 3D view
 	const ImVec2 display = ImGui::GetIO().DisplaySize;
 	ImGui::SetNextWindowPos(ImVec2{ std::max(display.x - 580.0f, 0.0f), 410.0f }, ImGuiCond_FirstUseEver);
-	ImGui::SetNextWindowSize(ImVec2{ 560.0f, 360.0f }, ImGuiCond_FirstUseEver);
+	ImGui::SetNextWindowSize(ImVec2{ 560.0f, 470.0f }, ImGuiCond_FirstUseEver);
 	ImGui::Begin("X-ray setup");
 
 	// the values are clamped by the sliders (also when a value is typed), so that they are always valid
 	bool      is_changed{ false };
 	const int clamp_flag = ImGuiSliderFlags_AlwaysClamp;
 	is_changed |= ImGui::SliderFloat("Energy (keV)", &setup.energy, Xray_Setup::MIN_ENERGY, Xray_Setup::MAX_ENERGY, "%.0f", clamp_flag);
-	is_changed |= ImGui::SliderFloat(
-		"Source distance (cm)",
-		&setup.source_distance,
-		Xray_Setup::MIN_SOURCE_DISTANCE,
-		Xray_Setup::MAX_SOURCE_DISTANCE,
+
+
+	// the tube is free: its position, where it points (yaw about the axis y, pitch towards +y), and the detector, which follows the beam
+	// at a distance of the source and is turned about the beam by the roll
+	is_changed |= ImGui::SliderFloat3(
+		"Source position (cm)",
+		setup.source_position.data(),
+		Xray_Setup::MIN_SOURCE_POSITION,
+		Xray_Setup::MAX_SOURCE_POSITION,
 		"%.0f",
 		clamp_flag);
+	is_changed |= ImGui::SliderFloat("Yaw (degrees)", &setup.yaw, Xray_Setup::MIN_YAW, Xray_Setup::MAX_YAW, "%.0f", clamp_flag);
+	is_changed |= ImGui::SliderFloat("Pitch (degrees)", &setup.pitch, Xray_Setup::MIN_PITCH, Xray_Setup::MAX_PITCH, "%.0f", clamp_flag);
+	is_changed |= ImGui::SliderFloat("Roll (degrees)", &setup.roll, Xray_Setup::MIN_ROLL, Xray_Setup::MAX_ROLL, "%.0f", clamp_flag);
+	if (ImGui::Button("Aim at the centre of the scene"))
+	{ // the yaw and the pitch that point the beam at the origin from where the source is
+		setup.aim_at({ 0.0f, 0.0f, 0.0f });
+		is_changed = true;
+	}
 	is_changed |= ImGui::SliderFloat(
-		"Detector distance (cm)",
-		&setup.detector_distance,
-		Xray_Setup::MIN_DETECTOR_DISTANCE,
-		Xray_Setup::MAX_DETECTOR_DISTANCE,
+		"Source to detector (cm)",
+		&setup.source_detector_distance,
+		Xray_Setup::MIN_SOURCE_DETECTOR_DISTANCE,
+		Xray_Setup::MAX_SOURCE_DETECTOR_DISTANCE,
 		"%.0f",
 		clamp_flag);
 	is_changed |= ImGui::SliderFloat(
@@ -475,11 +487,22 @@ void Xray_View::draw_setup_window()
 	}
 
 	// the texts wrap at the right edge of the window, whatever its size
-	ImGui::TextWrapped(
-		"Magnification %.2f, detector %.0f x %.0f mm",
-		setup.get_magnification(),
-		setup.width_in_pixels * setup.pixel_size,
-		setup.height_in_pixels * setup.pixel_size);
+	const float magnification = setup.get_magnification();
+	if (magnification > 0.0f)
+	{
+		ImGui::TextWrapped(
+			"Magnification of the centre of the scene %.2f, detector %.0f x %.0f mm",
+			magnification,
+			setup.width_in_pixels * setup.pixel_size,
+			setup.height_in_pixels * setup.pixel_size);
+	}
+	else
+	{
+		ImGui::TextWrapped(
+			"The centre of the scene is behind the source, detector %.0f x %.0f mm",
+			setup.width_in_pixels * setup.pixel_size,
+			setup.height_in_pixels * setup.pixel_size);
+	}
 
 	ImGui::Checkbox("Recompute on change", &is_auto_recompute);
 	ImGui::SameLine();
@@ -632,11 +655,20 @@ void Xray_View::draw_background() const
 
 double Xray_View::get_transmission_at(float x, float y) const
 {
-	// the point is in the plane z = 0 of the scene: the source projects it on the detector with the magnification of the setup of the
-	// image. The centre of the detector is the pixel at half of the width and of the height
-	const double scale    = static_cast<double>(Scene::MILLIMETRES_PER_UNIT) * image_setup.get_magnification() / image_setup.pixel_size;
-	const double column   = image.width / 2.0 + static_cast<double>(x) * scale;
-	const double row      = image.height / 2.0 + static_cast<double>(y) * scale;
+	return get_transmission_at(std::array<float, 3>{ x, y, 0.0f });
+}
+
+double Xray_View::get_transmission_at(const std::array<float, 3>& point) const
+{
+	// the source of the setup of the image projects the point on the detector, in millimetres from its centre, which is the pixel at
+	// half of the width and of the height (the image is mirrored, so that +x of the detector is on its right: see compute)
+	double x_on_detector{ 0.0 };
+	double y_on_detector{ 0.0 };
+	if (!image_setup.project(point, x_on_detector, y_on_detector))
+		return -1.0;
+
+	const double column   = image.width / 2.0 + x_on_detector / image_setup.pixel_size;
+	const double row      = image.height / 2.0 + y_on_detector / image_setup.pixel_size;
 	const int    centre_x = static_cast<int>(std::floor(column));
 	const int    centre_y = static_cast<int>(std::floor(row));
 	if (centre_x < 1 || centre_y < 1 || centre_x + 1 >= static_cast<int>(image.width) || centre_y + 1 >= static_cast<int>(image.height))
@@ -671,10 +703,10 @@ std::string Xray_View::check_current_image(double& water_transmission, double& i
 	if (corner_transmission < 0.9)
 		return "The corners of the image are attenuated (transmission " + std::to_string(corner_transmission) + ")";
 
-	// each object attenuates the beam where its centre projects (the objects are in the plane z = 0 in the default scene)
+	// each object attenuates the beam where its centre projects
 	for (const Scene_Object& object : scene->get_objects())
 	{
-		const double transmission = get_transmission_at(object.position[0], object.position[1]);
+		const double transmission = get_transmission_at(object.position);
 		std::cout << "[INFO::XRAY_VIEW::check_image] transmission behind '" << object.name << "': " << transmission << std::endl;
 		if (!(transmission >= 0.0 && transmission < 0.9))
 			return "The beam is not attenuated behind '" + object.name + "' (transmission " + std::to_string(transmission) + ")";
@@ -733,12 +765,12 @@ void Xray_View::check_image()
 	}
 
 	// another geometry and another detector: the image has the new size, and the shadows are where the new magnification puts them
-	setup                   = original;
-	setup.source_distance   = 150.0f;
-	setup.detector_distance = 100.0f;
-	setup.pixel_size        = 4.0f;
-	setup.width_in_pixels   = 128;
-	setup.height_in_pixels  = 64;
+	setup                          = original;
+	setup.source_position          = { 0.0f, 0.0f, -150.0f };
+	setup.source_detector_distance = 250.0f;
+	setup.pixel_size               = 4.0f;
+	setup.width_in_pixels          = 128;
+	setup.height_in_pixels         = 64;
 	apply_setup();
 	reason = check_current_image(water, iron);
 	if (reason.empty() && (image.width != 128 || image.height != 64))
@@ -759,19 +791,32 @@ void Xray_View::check_image()
 		return;
 	}
 
-	// the update in place gives the image of a new adapter: the same geometry, with the same number of pixels, once in place and once
-	// with a new adapter (the setup of the start has the number of pixels of the adapter that the last change created)
+	// a free tube: the source beside and above the scene, aimed at its centre, with the detector rolled. It is set in place (the setup
+	// of the start has the number of pixels of the adapter that the last change created), the shadow of each object is where the
+	// projection of the setup puts its centre, and the corners are clear
 	setup = original;
 	apply_setup(true);
-	setup.source_distance   = 150.0f;
-	setup.detector_distance = 100.0f;
-	setup.pixel_size        = 3.0f;
+	setup.source_position = { 60.0f, 30.0f, -90.0f };
+	setup.aim_at({ 0.0f, 0.0f, 0.0f });
+	setup.roll                     = 25.0f;
+	setup.source_detector_distance = 170.0f;
+	setup.pixel_size               = 3.0f;
 	apply_setup();
 	if (!was_updated_in_place)
 	{
 		fail("A change of the geometry with the same number of pixels did not update the adapter in place");
 		return;
 	}
+	std::cout << "[INFO::XRAY_VIEW::check_image] free tube: source (60, 30, -90) cm, yaw " << setup.yaw << ", pitch " << setup.pitch
+			  << ", roll " << setup.roll << " degrees" << std::endl;
+	reason = check_current_image(water, iron);
+	if (!reason.empty())
+	{
+		fail("With a free tube: " + reason);
+		return;
+	}
+
+	// the update in place gives the image of a new adapter: the same geometry, once in place and once with a new adapter
 	const Xray_Image in_place_image = image;
 	apply_setup(true);
 	if (was_updated_in_place || !is_image_valid)
@@ -808,7 +853,8 @@ void Xray_View::check_image()
 	}
 
 	std::cout << "[SUCCESS::XRAY_VIEW::check_image] The X-ray images of the scene are valid, each object attenuates the beam, the "
-				 "changes of the setup take effect, and the update in place gives the image of a new adapter"
+				 "changes of the setup take effect, a free tube puts the shadows where its projection says, and the update in place gives "
+				 "the image of a new adapter"
 			  << std::endl;
 	is_check_passed = true;
 }

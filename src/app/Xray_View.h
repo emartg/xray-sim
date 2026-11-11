@@ -58,8 +58,10 @@ public:
 	// or the centre of the detector is inside an object (see get_geometry_problem), nothing is computed and the last image stays
 	void update_scene();
 
-	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the plane z = 0 of the scene (in
-	// centimetres) on the detector, relative to the unattenuated beam. Returns -1 if the projection is outside of the detector
+	// Returns the mean of the image in the block of 3 by 3 pixels at the projection of a point of the scene (in centimetres) on the
+	// detector, relative to the unattenuated beam. Returns -1 if the point is not in front of the source or its projection is outside
+	// of the detector. The second form takes a point of the plane z = 0
+	double get_transmission_at(const std::array<float, 3>& point) const;
 	double get_transmission_at(float x, float y) const;
 
 	// Creates a new adapter with the scene and the setup, computes the image again, and returns the largest difference between this image
