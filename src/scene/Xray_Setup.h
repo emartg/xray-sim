@@ -53,6 +53,13 @@ struct Xray_Setup
 	// direction, and turned about the direction by the roll
 	std::array<float, 3> get_detector_up() const;
 
+	// Returns the right of the image as the simulator shows it, a unit vector perpendicular to the beam and to the up vector (seen from
+	// the detector towards the source, it is +x of the scene for the default angles)
+	std::array<float, 3> get_detector_right() const;
+
+	// Returns the width and the height of the detector, in centimetres
+	std::array<float, 2> get_detector_size() const;
+
 	// Projects a point of the scene (in centimetres) on the detector from the source. Returns false if the point is not in front of
 	// the source. The coordinates are in millimetres from the centre of the detector: x_on_detector grows to the right of the image
 	// as the simulator shows it (seen from the detector towards the source, which is +x of the scene for the default angles), and

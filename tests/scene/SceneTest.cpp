@@ -313,6 +313,26 @@ namespace
 		check(
 			single.find_object_around_point({ 0.0f, 0.0f, 0.0f })->name == object.name,
 			"bounds: the object found should be the one around the point");
+
+		// a rectangle (the detector plate) touches the sphere through its inside, its edge, or its corner, not only through its centre
+		single.set_object_scale(0, { 1.0f, 1.0f, 1.0f }); // radius 4 cm at the origin
+		const std::array<float, 3> right{ 1.0f, 0.0f, 0.0f };
+		const std::array<float, 3> up{ 0.0f, 1.0f, 0.0f };
+		check(
+			single.find_object_touching_rectangle({ 0.0f, 0.0f, 3.0f }, right, up, 1.0f, 1.0f) != nullptr,
+			"bounds: a plate through the sphere touches it");
+		check(
+			single.find_object_touching_rectangle({ 0.0f, 0.0f, 4.5f }, right, up, 20.0f, 10.0f) == nullptr,
+			"bounds: a plate in front of the sphere does not touch it");
+		check(
+			single.find_object_touching_rectangle({ 20.0f, 0.0f, 0.0f }, right, up, 17.0f, 5.0f) != nullptr,
+			"bounds: a plate whose centre is outside of the sphere touches it with its side");
+		check(
+			single.find_object_touching_rectangle({ 20.0f, 0.0f, 0.0f }, right, up, 15.0f, 5.0f) == nullptr,
+			"bounds: a plate that stops short of the sphere does not touch it");
+		check(
+			single.find_object_touching_rectangle({ 6.0f, 6.0f, 0.0f }, right, up, 3.5f, 3.5f) != nullptr,
+			"bounds: a plate touches the sphere with its corner");
 	}
 } // namespace
 

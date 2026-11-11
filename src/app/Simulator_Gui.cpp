@@ -349,17 +349,18 @@ void Simulator_Gui::draw_scene_window()
 			materials[material_index].xray.compound.c_str(),
 			materials[material_index].xray.density);
 
-		// the transform of the object: the sliders keep every value within the limits of the scene, also when a value is typed; the nodes
-		// and the X-ray image follow the scene (see Scene_Sync and Xray_View)
+		// the transform of the object: drag fields with a fine step per pixel (1 mm, 0.2 degrees, and 0.005 of scale; Shift drags 10 times
+		// faster, Alt 100 times slower, and a double click or Ctrl+click types a value) that keep every value within the limits of the
+		// scene; the nodes and the X-ray image follow the scene (see Scene_Sync and Xray_View)
 		const int            clamp_flag = ImGuiSliderFlags_AlwaysClamp;
 		std::array<float, 3> position   = current.position;
 		std::array<float, 3> rotation   = current.rotation;
 		std::array<float, 3> scale      = current.scale;
-		if (ImGui::SliderFloat3("Position (cm)", position.data(), Scene::MIN_POSITION, Scene::MAX_POSITION, "%.1f", clamp_flag))
+		if (ImGui::DragFloat3("Position (cm)", position.data(), 0.1f, Scene::MIN_POSITION, Scene::MAX_POSITION, "%.1f", clamp_flag))
 			scene->set_object_position(*selected, position);
-		if (ImGui::SliderFloat3("Rotation (degrees)", rotation.data(), Scene::MIN_ROTATION, Scene::MAX_ROTATION, "%.1f", clamp_flag))
+		if (ImGui::DragFloat3("Rotation (degrees)", rotation.data(), 0.2f, Scene::MIN_ROTATION, Scene::MAX_ROTATION, "%.1f", clamp_flag))
 			scene->set_object_rotation(*selected, rotation);
-		if (ImGui::SliderFloat3("Scale", scale.data(), Scene::MIN_SCALE, Scene::MAX_SCALE, "%.2f", clamp_flag))
+		if (ImGui::DragFloat3("Scale", scale.data(), 0.005f, Scene::MIN_SCALE, Scene::MAX_SCALE, "%.3f", clamp_flag))
 			scene->set_object_scale(*selected, scale);
 	}
 
@@ -483,15 +484,14 @@ void Simulator_Gui::run_scene_change_test()
 		return;
 	}
 
-	// the centre of the detector inside an object: no image is computed, the last one stays, and the reason is given; the object back
+	// the detector plate through an object: no image is computed, the last one stays, and the reason is given; the object back
 	// out of the way, the image is computed again
 	scene->set_object_position(water, { 0.0f, 0.0f, 49.5f }); // the detector is 50 cm behind the plane z = 0
 	scene_sync->update();
 	xray_view->update_scene();
 	const double      cube_while_stopped = xray_view->get_transmission_at(cube_x, cube_y + 5.0f);
 	const std::string problem            = xray_view->get_geometry_problem();
-	std::cout << "[INFO::SIMULATOR_GUI::run_scene_change_test] with the sphere around the centre of the detector: '" << problem << "'"
-			  << std::endl;
+	std::cout << "[INFO::SIMULATOR_GUI::run_scene_change_test] with the sphere on the detector plate: '" << problem << "'" << std::endl;
 	if (problem.empty() || cube_while_stopped != cube_moved)
 	{
 		fail("The sphere around the detector was not refused, or the last image did not stay");

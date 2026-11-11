@@ -246,6 +246,30 @@ const Scene_Object* Scene::find_object_around_point(const std::array<float, 3>& 
 	return nullptr;
 }
 
+const Scene_Object* Scene::find_object_touching_rectangle(
+	const std::array<float, 3>& centre,
+	const std::array<float, 3>& right,
+	const std::array<float, 3>& up,
+	float                       half_width,
+	float                       half_height) const
+{
+	const glm::vec3 rectangle_centre{ centre[0], centre[1], centre[2] };
+	const glm::vec3 right_vector{ right[0], right[1], right[2] };
+	const glm::vec3 up_vector{ up[0], up[1], up[2] };
+	for (const Scene_Object& object : objects)
+	{
+		// the point of the rectangle that is the closest to the centre of the object: its coordinates along the sides, within the sides
+		const glm::vec3 object_centre{ object.position[0], object.position[1], object.position[2] };
+		const glm::vec3 offset      = object_centre - rectangle_centre;
+		const float     along_right = std::clamp(glm::dot(offset, right_vector), -half_width, half_width);
+		const float     along_up    = std::clamp(glm::dot(offset, up_vector), -half_height, half_height);
+		const glm::vec3 closest     = rectangle_centre + right_vector * along_right + up_vector * along_up;
+		if (glm::length(object_centre - closest) < get_bounding_radius(object))
+			return &object;
+	}
+	return nullptr;
+}
+
 std::vector<Xray_Mesh> Scene::make_xray_meshes() const
 {
 	std::vector<Xray_Mesh> meshes;
