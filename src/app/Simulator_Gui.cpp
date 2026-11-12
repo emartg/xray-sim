@@ -14,6 +14,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "Scene_Builder.h"
 #include "Scene_Sync.h"
 #include "core/Core.h"
 #include "core/Node.h"
@@ -33,18 +34,17 @@ namespace
 		return engine && engine->get_scene_manager() ? engine->get_scene_manager()->get_camera() : nullptr;
 	}
 
-	// Returns the position and the angles of the Engine's camera
+	// Returns the position (in centimetres of the scene) and the angles of the Engine's camera
 	Orbit_Camera get_engine_view(const Camera& camera)
 	{
-		Orbit_Camera    view;
-		const glm::vec3 position = camera.get_position();
-		view.position            = { position.x, position.y, position.z };
-		view.yaw                 = camera.get_yaw();
-		view.pitch               = camera.get_pitch();
+		Orbit_Camera view;
+		view.position = Scene_Builder::from_view(camera.get_position());
+		view.yaw      = camera.get_yaw();
+		view.pitch    = camera.get_pitch();
 		return view;
 	}
 
-	// Gives the Engine's camera a position and angles
+	// Gives the Engine's camera a position (in centimetres of the scene) and angles
 	void set_engine_view(Camera& camera, const Orbit_Camera& view)
 	{
 		// the angles: the camera computes its vectors again from its angles when it turns, so a turn of zero applies the new ones
@@ -55,7 +55,7 @@ namespace
 		// the position: the camera of the Engine (v0.9.0) has no setter for it, so it moves there along its own vectors, across the
 		// view with its translation (in units of the scene, with a sensitivity of 1) and along the view with a step forward (its speed
 		// times a time, which can be negative)
-		const glm::vec3 movement = glm::vec3{ view.position[0], view.position[1], view.position[2] } - camera.get_position();
+		const glm::vec3 movement = Scene_Builder::to_view(view.position) - camera.get_position();
 		camera.process_mouse_translation(glm::dot(movement, camera.get_right()), glm::dot(movement, camera.get_up()), 1.0f);
 		camera.process_keyboard(Camera_Movement::FORWARD, glm::dot(movement, camera.get_front()) / camera.get_movement_speed());
 	}
@@ -559,8 +559,9 @@ void Simulator_Gui::run_scene_change_test()
 		return;
 	}
 	const glm::quat expected_rotation{ glm::radians(glm::vec3{ 0.0f, 60.0f, 15.0f }) };
-	if (cube_node->get_position() != glm::vec3{ cube_x, cube_y + 5.0f, 0.0f } ||
-		std::abs(glm::dot(cube_node->get_rotation(), expected_rotation)) < 0.9999f || water_node->get_scale() != glm::vec3{ 0.5f })
+	if (cube_node->get_position() != Scene_Builder::to_view({ cube_x, cube_y + 5.0f, 0.0f }) ||
+		std::abs(glm::dot(cube_node->get_rotation(), expected_rotation)) < 0.9999f ||
+		water_node->get_scale() != Scene_Builder::to_view({ 0.5f, 0.5f, 0.5f }))
 	{
 		fail("The nodes did not take the position, the rotation, and the scale");
 		return;
@@ -727,25 +728,30 @@ void Simulator_Gui::run_camera_test()
 		return;
 	}
 
+	// the positions are compared in centimetres of the scene (the Engine's camera is in the units of the view)
 	const auto is_near = [](const glm::vec3& a, const std::array<float, 3>& b) {
 		return glm::length(a - glm::vec3{ b[0], b[1], b[2] }) < 1e-3f;
+	};
+	const auto camera_position = [&camera]() {
+		const std::array<float, 3> position = get_engine_view(*camera).position;
+		return glm::vec3{ position[0], position[1], position[2] };
 	};
 	const auto distance_to_pivot = [this](const glm::vec3& position) {
 		return glm::length(position - glm::vec3{ camera_pivot[0], camera_pivot[1], camera_pivot[2] });
 	};
 	const Orbit_Camera start          = get_engine_view(*camera);
-	const float        start_distance = distance_to_pivot(camera->get_position());
+	const float        start_distance = distance_to_pivot(camera_position());
 
 	// the orbit: 360 pixels to the right and 40 down turn the camera 90 degrees about the cube and 10 degrees down, at the same distance
 	Orbit_Camera expected = start;
 	expected.orbit(camera_pivot, 360.0f, 40.0f);
 	move_camera(360.0f, 40.0f, 0.0f, 0.0f, 0.0f);
-	if (!is_near(camera->get_position(), expected.position) || !is_near(camera->get_front(), expected.get_front()))
+	if (!is_near(camera_position(), expected.position) || !is_near(camera->get_front(), expected.get_front()))
 	{
 		fail("The orbit did not put the Engine's camera where the orbit camera puts it");
 		return;
 	}
-	if (std::abs(distance_to_pivot(camera->get_position()) - start_distance) > 1e-3f ||
+	if (std::abs(distance_to_pivot(camera_position()) - start_distance) > 1e-3f ||
 		std::abs(camera->get_pitch() - (start.pitch - 10.0f)) > 1e-3f)
 	{
 		fail("The orbit changed the distance to the cube, or did not turn the camera 10 degrees down");
@@ -758,7 +764,7 @@ void Simulator_Gui::run_camera_test()
 	const float depth = expected.get_depth_of(camera_pivot);
 	expected.dolly(camera_pivot, 1.0f);
 	move_camera(0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
-	if (!is_near(camera->get_position(), expected.position) || !is_near(camera->get_front(), expected.get_front()) ||
+	if (!is_near(camera_position(), expected.position) || !is_near(camera->get_front(), expected.get_front()) ||
 		std::abs(get_engine_view(*camera).get_depth_of(camera_pivot) - 0.85f * depth) > 1e-3f)
 	{
 		fail("The pan or the dolly did not put the Engine's camera where the orbit camera puts it");
@@ -769,7 +775,7 @@ void Simulator_Gui::run_camera_test()
 
 	// the camera goes back to where it was
 	set_engine_view(*camera, start);
-	if (!is_near(camera->get_position(), start.position) || !is_near(camera->get_front(), start.get_front()))
+	if (!is_near(camera_position(), start.position) || !is_near(camera->get_front(), start.get_front()))
 	{
 		fail("The Engine's camera did not go back to where it was");
 		return;

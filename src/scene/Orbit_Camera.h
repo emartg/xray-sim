@@ -20,11 +20,12 @@ struct Orbit_Camera
 	// ----------------
 	// How far the mouse turns, pans, and dollies the camera, and its limits: a pitch that stops short of the vertical (as the Engine's
 	// camera does, where the yaw would lose its meaning), and a distance to the pivot, along the view, that the wheel keeps between a
-	// close look and the far plane of the Engine's view (100 cm from the camera; farther objects are not drawn)
+	// close look and a view of the whole X-ray setup (a tube within 3 m of the centre of the scene) that stays well within the far plane
+	// of the Engine's view (10 m from the camera; farther objects are not drawn)
 	static constexpr float ORBIT_DEGREES_PER_PIXEL{ 0.25f };
 	static constexpr float DOLLY_FACTOR_PER_NOTCH{ 0.85f }; // the distance to the pivot is multiplied by it for each notch of the wheel
-	static constexpr float MIN_PITCH{ -89.0f }, MAX_PITCH{ 89.0f };     // in degrees
-	static constexpr float MIN_DISTANCE{ 2.0f }, MAX_DISTANCE{ 90.0f }; // from the camera to the pivot along the view, in centimetres
+	static constexpr float MIN_PITCH{ -89.0f }, MAX_PITCH{ 89.0f };      // in degrees
+	static constexpr float MIN_DISTANCE{ 2.0f }, MAX_DISTANCE{ 600.0f }; // from the camera to the pivot along the view, in centimetres
 
 	// Public Methods
 	// --------------
