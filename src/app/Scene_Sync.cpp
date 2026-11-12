@@ -9,6 +9,7 @@
 #include <iostream>
 #include <utility>
 
+#include "Scene_Builder.h"
 #include "core/Core.h"
 #include "core/Node.h"
 #include "core/managers/Node_Manager.h"
@@ -80,7 +81,7 @@ void Scene_Sync::update()
 		}
 		if (object.position != state.position)
 		{
-			node->set_position(glm::vec3{ object.position[0], object.position[1], object.position[2] });
+			node->set_position(Scene_Builder::to_view(object.position));
 			state.position = object.position;
 		}
 		if (object.rotation != state.rotation)
@@ -90,7 +91,8 @@ void Scene_Sync::update()
 		}
 		if (object.scale != state.scale)
 		{
-			node->set_scale(glm::vec3{ object.scale[0], object.scale[1], object.scale[2] });
+			node->set_scale(
+				Scene_Builder::to_view(object.scale)); // the scale of the node also converts the vertices to the units of the view
 			state.scale = object.scale;
 		}
 	}

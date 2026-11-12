@@ -183,7 +183,7 @@ namespace
 		camera.dolly(pivot, 1.0f);
 		check(is_near(camera.get_depth_of(pivot), Orbit_Camera::MIN_DISTANCE, 1e-3), "and goes no closer");
 		camera.dolly(pivot, -100.0f);
-		check(is_near(camera.get_depth_of(pivot), Orbit_Camera::MAX_DISTANCE, 1e-3), "the camera stops 90 cm from the pivot");
+		check(is_near(camera.get_depth_of(pivot), Orbit_Camera::MAX_DISTANCE, 1e-3), "the camera stops 6 m from the pivot");
 		camera.dolly(pivot, -1.0f);
 		check(is_near(camera.get_depth_of(pivot), Orbit_Camera::MAX_DISTANCE, 1e-3), "and goes no farther");
 
