@@ -75,6 +75,12 @@ public:
 	// Returns whether the image is shown as the background of the whole window, in place of the 3D view
 	bool get_is_single_view() const { return is_single_view; }
 
+	// Returns the setup that the user chooses in the X-ray setup window (the one of the image while it is applied)
+	const Xray_Setup& get_setup() const { return setup; }
+
+	// Returns whether the user wants the tube, the detector, and the edges of the beam drawn in the 3D view (see Tube_Display)
+	bool get_is_tube_shown() const { return is_tube_shown; }
+
 	// The reason why the last change of the scene or of the setup was not computed (the source or the centre of the detector is inside an
 	// object), or an empty string. The last image stays on the screen while there is a reason
 	const std::string& get_geometry_problem() const { return geometry_problem; }
@@ -142,6 +148,7 @@ private:
 	Xray_Setup image_setup;               // the values of the current image
 	bool       is_auto_recompute{ true }; // true: the image is computed again whenever a value of the setup changes
 	bool       is_setup_dirty{ false };   // true: a value of the setup changed and is not applied yet
+	bool       is_tube_shown{ true };     // true: the 3D view draws the tube, the detector, and the edges of the beam
 
 	// Times of the last image, in milliseconds (the ones of the adapter are in timings)
 	Xray_Timings timings;

@@ -106,6 +106,20 @@ std::array<float, 2> Xray_Setup::get_detector_size() const
 			 static_cast<float>(height_in_pixels) * pixel_size / millimetres_per_centimetre };
 }
 
+std::array<std::array<float, 3>, 4> Xray_Setup::get_detector_corners() const
+{
+	const glm::vec3            centre = to_vector(get_detector_position());
+	const glm::vec3            right  = to_vector(get_detector_right());
+	const glm::vec3            up     = to_vector(get_detector_up());
+	const std::array<float, 2> size   = get_detector_size();
+	const glm::vec3            half_width{ right * (size[0] / 2.0f) };
+	const glm::vec3            half_height{ up * (size[1] / 2.0f) };
+	return { to_array(centre - half_width + half_height),
+			 to_array(centre + half_width + half_height),
+			 to_array(centre + half_width - half_height),
+			 to_array(centre - half_width - half_height) };
+}
+
 bool Xray_Setup::project(const std::array<float, 3>& point, double& x_on_detector, double& y_on_detector) const
 {
 	const glm::vec3 direction = to_vector(get_direction());
