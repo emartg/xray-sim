@@ -72,6 +72,9 @@ public:
 	// true if the checks of the first image (see check_image) were all successful
 	bool get_is_check_passed() const { return is_check_passed; }
 
+	// Returns whether the image is shown as the background of the whole window, in place of the 3D view
+	bool get_is_single_view() const { return is_single_view; }
+
 	// The reason why the last change of the scene or of the setup was not computed (the source or the centre of the detector is inside an
 	// object), or an empty string. The last image stays on the screen while there is a reason
 	const std::string& get_geometry_problem() const { return geometry_problem; }

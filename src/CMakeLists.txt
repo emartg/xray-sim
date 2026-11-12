@@ -80,12 +80,13 @@ if(XRSIM_BUILD_TESTS)
 		# Test of the X-ray view: in the first frame, it computes the X-ray image of the default scene and checks that each
 		# object attenuates the beam where it projects and that the corners are not attenuated; then it changes the material of an
 		# object and deletes the node of another one, as the user does, and checks that the Engine's nodes, the scene, and the X-ray
-		# image follow; and it clicks at the centre of the 3D view and checks which object is selected. The smoke test above shows
+		# image follow; it clicks at the centre of the 3D view and checks which object is selected; and it orbits the camera of the
+		# 3D view about that object, pans it, and dollies it, and checks where the Engine's camera is. The smoke test above shows
 		# the image too, without checking it
 		add_test(NAME XRSim_Xray_View_Test COMMAND XRSim --frames 3 --xray-view-test)
 		set_tests_properties(XRSim_Xray_View_Test PROPERTIES
 			LABELS smoke
-			PASS_REGULAR_EXPRESSION "SUCCESS::SIMULATOR_GUI::run_selection_test"
+			PASS_REGULAR_EXPRESSION "SUCCESS::SIMULATOR_GUI::run_camera_test"
 			FAIL_REGULAR_EXPRESSION "[[]ERROR"
 			TIMEOUT 300
 		)

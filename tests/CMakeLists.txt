@@ -36,6 +36,17 @@ set_tests_properties(Xray_Setup_Test PROPERTIES
 	TIMEOUT 60
 )
 
+# Test of the orbit camera of the 3D view (the orbit, the pan, the dolly, and their limits): it needs no OpenGL context either
+add_executable(Orbit_Camera_Test scene/OrbitCameraTest.cpp)
+target_link_libraries(Orbit_Camera_Test PRIVATE XRSim::Scene)
+
+add_test(NAME Orbit_Camera_Test COMMAND Orbit_Camera_Test)
+set_tests_properties(Orbit_Camera_Test PROPERTIES
+	LABELS unit
+	FAIL_REGULAR_EXPRESSION "[[]ERROR"
+	TIMEOUT 60
+)
+
 # Test of the display library (the conversion of an X-ray image to grey values): it needs no OpenGL context either
 add_executable(Xray_Display_Test display/XrayDisplayTest.cpp)
 target_link_libraries(Xray_Display_Test PRIVATE XRSim::Display)

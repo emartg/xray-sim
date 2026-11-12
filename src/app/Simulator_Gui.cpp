@@ -6,6 +6,7 @@
 #include "Simulator_Gui.h"
 
 #include <array>
+#include <memory>
 #include <optional>
 
 #include <imgui.h>
@@ -16,9 +17,49 @@
 #include "Scene_Sync.h"
 #include "core/Core.h"
 #include "core/Node.h"
+#include "core/camera/Camera.h"
 #include "core/managers/Node_Manager.h"
+#include "core/managers/Scene_Manager.h"
 #include "core/managers/Selection_Manager.h"
+#include "scene/Orbit_Camera.h"
 #include "scene/Scene_Material_Table.h"
+
+namespace
+{
+	// Returns the Engine's camera, or null if the Engine or its scene are not ready
+	std::shared_ptr<Camera> get_engine_camera()
+	{
+		Core* engine = Core::get_instance();
+		return engine && engine->get_scene_manager() ? engine->get_scene_manager()->get_camera() : nullptr;
+	}
+
+	// Returns the position and the angles of the Engine's camera
+	Orbit_Camera get_engine_view(const Camera& camera)
+	{
+		Orbit_Camera    view;
+		const glm::vec3 position = camera.get_position();
+		view.position            = { position.x, position.y, position.z };
+		view.yaw                 = camera.get_yaw();
+		view.pitch               = camera.get_pitch();
+		return view;
+	}
+
+	// Gives the Engine's camera a position and angles
+	void set_engine_view(Camera& camera, const Orbit_Camera& view)
+	{
+		// the angles: the camera computes its vectors again from its angles when it turns, so a turn of zero applies the new ones
+		camera.set_yaw(view.yaw);
+		camera.set_pitch(view.pitch);
+		camera.process_mouse_rotation(0.0f, 0.0f);
+
+		// the position: the camera of the Engine (v0.9.0) has no setter for it, so it moves there along its own vectors, across the
+		// view with its translation (in units of the scene, with a sensitivity of 1) and along the view with a step forward (its speed
+		// times a time, which can be negative)
+		const glm::vec3 movement = glm::vec3{ view.position[0], view.position[1], view.position[2] } - camera.get_position();
+		camera.process_mouse_translation(glm::dot(movement, camera.get_right()), glm::dot(movement, camera.get_up()), 1.0f);
+		camera.process_keyboard(Camera_Movement::FORWARD, glm::dot(movement, camera.get_front()) / camera.get_movement_speed());
+	}
+} // namespace
 
 #ifdef XRSIM_HAS_XRAY
 	#include <algorithm>
@@ -234,6 +275,9 @@ void Simulator_Gui::draw()
 	}
 #endif
 
+	// the mouse over the 3D view moves its camera, before the Engine draws the scene of this frame
+	update_camera();
+
 	// set the position and size explicitly, so that the window is visible from the first frame
 	ImGui::SetNextWindowPos(ImVec2{ 20.0f, 20.0f });
 	ImGui::SetNextWindowSize(ImVec2{ 360.0f, 80.0f });
@@ -258,6 +302,8 @@ void Simulator_Gui::draw()
 		}
 		if (selection_test_stage > 0)
 			run_selection_test();
+		if (is_camera_test_requested)
+			run_camera_test();
 	}
 #endif
 }
@@ -365,6 +411,66 @@ void Simulator_Gui::draw_scene_window()
 	}
 
 	ImGui::End();
+}
+
+void Simulator_Gui::update_camera()
+{
+	const ImGuiIO& io = ImGui::GetIO();
+
+	// the mouse moves the 3D view only where the 3D view is seen: not over a window of the GUI, and not in the single X-ray view
+	bool is_over_view = !io.WantCaptureMouse;
+#ifdef XRSIM_HAS_XRAY
+	if (xray_view && xray_view->get_is_single_view())
+	{
+		is_over_view = false;
+		is_orbiting  = false;
+		is_panning   = false;
+	}
+#endif
+
+	// a drag starts when its button is pressed over the 3D view, with the pivot of that moment, and goes on while the button is held
+	// (also over a window of the GUI)
+	if (is_over_view && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
+		camera_pivot = get_camera_pivot();
+	if (is_over_view && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+		is_orbiting = true;
+	if (is_over_view && ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+		is_panning = true;
+	if (!ImGui::IsMouseDown(ImGuiMouseButton_Right))
+		is_orbiting = false;
+	if (!ImGui::IsMouseDown(ImGuiMouseButton_Middle))
+		is_panning = false;
+
+	const ImVec2 delta = io.MouseDelta; // zero when the position of the mouse is not known
+	const ImVec2 orbit = is_orbiting ? delta : ImVec2{ 0.0f, 0.0f };
+	const ImVec2 pan   = is_panning ? delta : ImVec2{ 0.0f, 0.0f };
+	const float  wheel = is_over_view ? io.MouseWheel : 0.0f;
+	if (orbit.x != 0.0f || orbit.y != 0.0f || pan.x != 0.0f || pan.y != 0.0f || wheel != 0.0f)
+		move_camera(orbit.x, orbit.y, pan.x, pan.y, wheel);
+}
+
+std::array<float, 3> Simulator_Gui::get_camera_pivot() const
+{
+	const std::optional<std::size_t> selected = scene_sync ? scene_sync->get_selected_object() : std::nullopt;
+	if (scene && selected && *selected < scene->get_objects().size())
+		return scene->get_objects()[*selected].position;
+	return { 0.0f, 0.0f, 0.0f };
+}
+
+void Simulator_Gui::move_camera(float orbit_x, float orbit_y, float pan_x, float pan_y, float wheel)
+{
+	const std::shared_ptr<Camera> camera = get_engine_camera();
+	if (!camera)
+		return;
+
+	Orbit_Camera view = get_engine_view(*camera);
+	if (orbit_x != 0.0f || orbit_y != 0.0f)
+		view.orbit(camera_pivot, orbit_x, orbit_y);
+	if (pan_x != 0.0f || pan_y != 0.0f) // the field of view of the Engine's camera is its zoom, in degrees
+		view.pan(camera_pivot, pan_x, pan_y, camera->get_zoom(), ImGui::GetIO().DisplaySize.y);
+	if (wheel != 0.0f)
+		view.dolly(get_camera_pivot(), wheel);
+	set_engine_view(*camera, view);
 }
 
 void Simulator_Gui::run_scene_change_test()
@@ -593,6 +699,84 @@ void Simulator_Gui::run_selection_test()
 
 	selection_test_stage = 0;
 	std::cout << "[SUCCESS::SIMULATOR_GUI::run_selection_test] A click in the 3D view selects the object under it" << std::endl;
+	is_camera_test_requested = true;
+#endif
+}
+
+void Simulator_Gui::run_camera_test()
+{
+#ifdef XRSIM_HAS_XRAY
+	is_camera_test_requested = false;
+	const auto fail          = [](const std::string& reason) {
+		std::cerr << "[ERROR::SIMULATOR_GUI::run_camera_test] " << reason << std::endl;
+	};
+
+	const std::shared_ptr<Camera>    camera   = get_engine_camera();
+	const std::optional<std::size_t> selected = scene_sync ? scene_sync->get_selected_object() : std::nullopt;
+	if (!camera || !scene || !selected)
+	{
+		fail("The camera or the selected object are not ready");
+		return;
+	}
+
+	// the pivot is the selected object
+	camera_pivot = get_camera_pivot();
+	if (camera_pivot != scene->get_objects()[*selected].position)
+	{
+		fail("The pivot of the camera is not the position of the selected object");
+		return;
+	}
+
+	const auto is_near = [](const glm::vec3& a, const std::array<float, 3>& b) {
+		return glm::length(a - glm::vec3{ b[0], b[1], b[2] }) < 1e-3f;
+	};
+	const auto distance_to_pivot = [this](const glm::vec3& position) {
+		return glm::length(position - glm::vec3{ camera_pivot[0], camera_pivot[1], camera_pivot[2] });
+	};
+	const Orbit_Camera start          = get_engine_view(*camera);
+	const float        start_distance = distance_to_pivot(camera->get_position());
+
+	// the orbit: 360 pixels to the right and 40 down turn the camera 90 degrees about the cube and 10 degrees down, at the same distance
+	Orbit_Camera expected = start;
+	expected.orbit(camera_pivot, 360.0f, 40.0f);
+	move_camera(360.0f, 40.0f, 0.0f, 0.0f, 0.0f);
+	if (!is_near(camera->get_position(), expected.position) || !is_near(camera->get_front(), expected.get_front()))
+	{
+		fail("The orbit did not put the Engine's camera where the orbit camera puts it");
+		return;
+	}
+	if (std::abs(distance_to_pivot(camera->get_position()) - start_distance) > 1e-3f ||
+		std::abs(camera->get_pitch() - (start.pitch - 10.0f)) > 1e-3f)
+	{
+		fail("The orbit changed the distance to the cube, or did not turn the camera 10 degrees down");
+		return;
+	}
+
+	// the pan and the dolly: the direction of the view does not change, and a notch of the wheel takes 15 percent of the depth
+	expected.pan(camera_pivot, 50.0f, -30.0f, camera->get_zoom(), ImGui::GetIO().DisplaySize.y);
+	move_camera(0.0f, 0.0f, 50.0f, -30.0f, 0.0f);
+	const float depth = expected.get_depth_of(camera_pivot);
+	expected.dolly(camera_pivot, 1.0f);
+	move_camera(0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+	if (!is_near(camera->get_position(), expected.position) || !is_near(camera->get_front(), expected.get_front()) ||
+		std::abs(get_engine_view(*camera).get_depth_of(camera_pivot) - 0.85f * depth) > 1e-3f)
+	{
+		fail("The pan or the dolly did not put the Engine's camera where the orbit camera puts it");
+		return;
+	}
+	std::cout << "[INFO::SIMULATOR_GUI::run_camera_test] the camera orbited about '" << scene->get_objects()[*selected].name
+			  << "', panned, and moved to " << depth * 0.85f << " cm from it" << std::endl;
+
+	// the camera goes back to where it was
+	set_engine_view(*camera, start);
+	if (!is_near(camera->get_position(), start.position) || !is_near(camera->get_front(), start.get_front()))
+	{
+		fail("The Engine's camera did not go back to where it was");
+		return;
+	}
+
+	std::cout << "[SUCCESS::SIMULATOR_GUI::run_camera_test] The camera of the 3D view orbits about the selected object, pans, and dollies"
+			  << std::endl;
 #endif
 }
 
