@@ -546,6 +546,7 @@ void Xray_View::draw_setup_window()
 		is_changed = true;
 	}
 	ImGui::Checkbox("Print the times to the console", &is_console_output_enabled);
+	ImGui::Checkbox("Show the tube and the detector in the 3D view", &is_tube_shown);
 
 	if (is_changed)
 		is_setup_dirty = true;

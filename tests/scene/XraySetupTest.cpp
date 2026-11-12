@@ -2,12 +2,13 @@
  * XraySetupTest.cpp
  * This file is the test of the Xray_Setup struct. It checks the default setup (which is the one of the first X-ray view), the
  * conversion to the beam and the detector of the X-ray library, the free tube (the direction from the yaw and the pitch, the detector
- * that follows the beam, the roll, and aiming at a point), the projection of a point on the detector, the magnification, and the
- * limits of every value. It returns an error code if a check fails.
+ * that follows the beam, the roll, and aiming at a point), the projection of a point on the detector, the magnification, the corners of
+ * the detector plate, and the limits of every value. It returns an error code if a check fails.
  */
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <iostream>
 #include <limits>
 #include <string>
@@ -225,6 +226,43 @@ namespace
 		check(Xray_Setup::MIN_ENERGY < Xray_Setup::MAX_ENERGY && Xray_Setup::MIN_PIXELS < Xray_Setup::MAX_PIXELS, "the limits are ordered");
 		check(Xray_Setup::MIN_SOURCE_DETECTOR_DISTANCE > 0.0f, "the detector is never on the source");
 	}
+	// Checks the corners of the detector plate: the default ones, and, for a tube that is turned and rolled, corners that are on the plane
+	// of the detector, at the size of the detector, and that project where the corners of the image are
+	void test_detector_corners()
+	{
+		const Xray_Setup                          default_setup;
+		const std::array<std::array<float, 3>, 4> corners = default_setup.get_detector_corners();
+		check(is_near(corners[0], { -25.6f, 12.8f, 50.0f }), "the first corner is the top left of the image");
+		check(is_near(corners[1], { 25.6f, 12.8f, 50.0f }), "the second corner is the top right");
+		check(is_near(corners[2], { 25.6f, -12.8f, 50.0f }), "the third corner is the bottom right");
+		check(is_near(corners[3], { -25.6f, -12.8f, 50.0f }), "the fourth corner is the bottom left");
+
+		Xray_Setup setup;
+		setup.source_position                                = { 30.0f, 40.0f, -60.0f };
+		setup.yaw                                            = -25.0f;
+		setup.pitch                                          = -35.0f;
+		setup.roll                                           = 20.0f;
+		const std::array<std::array<float, 3>, 4>  turned    = setup.get_detector_corners();
+		const std::array<float, 3>                 centre    = setup.get_detector_position();
+		const std::array<float, 3>                 direction = setup.get_direction();
+		const std::array<float, 2>                 size      = setup.get_detector_size();
+		const std::array<std::array<double, 2>, 4> expected{
+			{ { -256.0, 128.0 }, { 256.0, 128.0 }, { 256.0, -128.0 }, { -256.0, -128.0 } }
+		};
+		for (std::size_t i = 0; i < turned.size(); ++i)
+		{
+			const std::array<float, 3> offset{ turned[i][0] - centre[0], turned[i][1] - centre[1], turned[i][2] - centre[2] };
+			check(is_near(dot(offset, direction), 0.0, 1e-3), "a corner is on the plane of the detector");
+			check(
+				is_near(dot(offset, offset), (size[0] * size[0] + size[1] * size[1]) / 4.0, 1e-2),
+				"a corner is half a diagonal from the centre");
+			double x{ 0.0 };
+			double y{ 0.0 };
+			check(
+				setup.project(turned[i], x, y) && is_near(x, expected[i][0], 1e-2) && is_near(y, expected[i][1], 1e-2),
+				"a corner projects on the corner of the image");
+		}
+	}
 } // namespace
 
 int main()
@@ -232,6 +270,7 @@ int main()
 	test_default_setup();
 	test_conversion();
 	test_free_tube();
+	test_detector_corners();
 	test_limits();
 
 	if (failures != 0)

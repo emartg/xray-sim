@@ -71,6 +71,7 @@ namespace
 
 	#include <glad/glad.h>
 
+	#include "Tube_Display.h"
 	#include "Xray_View.h"
 	#include "xray/Gvxr_Adapter.h"
 
@@ -253,7 +254,8 @@ Simulator_Gui::Simulator_Gui(std::shared_ptr<Scene> scene, bool run_xray_self_te
 	is_scene_change_test_requested{ run_xray_view_test && this->scene }
 {
 #ifdef XRSIM_HAS_XRAY
-	xray_view = std::make_unique<Xray_View>(this->scene, run_xray_view_test);
+	xray_view    = std::make_unique<Xray_View>(this->scene, run_xray_view_test);
+	tube_display = std::make_unique<Tube_Display>();
 #else
 	static_cast<void>(run_xray_view_test);
 #endif
@@ -293,6 +295,9 @@ void Simulator_Gui::draw()
 	{
 		xray_view->draw();
 
+		// the tube, the detector, and the edges of the beam follow the setup that the user chooses, before the Engine draws the scene
+		tube_display->update(xray_view->get_setup(), xray_view->get_is_tube_shown());
+
 		// after the checks of the first image, the changes of the scene are checked once
 		if (is_scene_change_test_requested && xray_view->get_is_check_passed())
 		{
@@ -304,6 +309,8 @@ void Simulator_Gui::draw()
 			run_selection_test();
 		if (is_camera_test_requested)
 			run_camera_test();
+		if (is_tube_display_test_requested)
+			run_tube_display_test();
 	}
 #endif
 }
@@ -782,6 +789,92 @@ void Simulator_Gui::run_camera_test()
 	}
 
 	std::cout << "[SUCCESS::SIMULATOR_GUI::run_camera_test] The camera of the 3D view orbits about the selected object, pans, and dollies"
+			  << std::endl;
+	is_tube_display_test_requested = true;
+#endif
+}
+
+void Simulator_Gui::run_tube_display_test()
+{
+#ifdef XRSIM_HAS_XRAY
+	is_tube_display_test_requested = false;
+	const auto fail                = [](const std::string& reason) {
+		std::cerr << "[ERROR::SIMULATOR_GUI::run_tube_display_test] " << reason << std::endl;
+	};
+
+	Core* engine = Core::get_instance();
+	if (!engine || !engine->get_node_manager() || !engine->get_selection_manager() || !xray_view || !tube_display)
+	{
+		fail("The Engine or the display of the tube are not ready");
+		return;
+	}
+	auto& node_manager      = engine->get_node_manager();
+	auto& selection_manager = engine->get_selection_manager();
+
+	// checks that every node exists, is visible or hidden as asked, and has the placement of its part for a setup
+	const auto check_nodes = [&](const Xray_Setup& setup, bool should_be_visible) {
+		for (std::size_t part = 0; part < Tube_Display::NODE_COUNT; ++part)
+		{
+			const std::shared_ptr<Node> node = node_manager->get_node_by_id(tube_display->get_node_ids()[part]);
+			if (!node || node->get_is_visible() != should_be_visible)
+				return false;
+			const Tube_Display::Part_Placement placement = Tube_Display::get_placement(setup, part);
+			if (glm::length(node->get_position() - Scene_Builder::to_view(placement.centre)) > 1e-4f ||
+				glm::length(node->get_scale() - Scene_Builder::to_view(placement.size)) > 1e-4f)
+				return false;
+			const glm::vec3 axis = node->get_rotation() * glm::vec3{ 0.0f, 0.0f, 1.0f };
+			if (glm::length(axis - glm::vec3{ placement.axes[2][0], placement.axes[2][1], placement.axes[2][2] }) > 1e-4f)
+				return false;
+		}
+		return true;
+	};
+
+	// the setup of the X-ray view: the housing on the source, the plate on the detector, and the edges to its corners
+	const Xray_Setup& setup = xray_view->get_setup();
+	if (!xray_view->get_is_tube_shown() || !check_nodes(setup, true))
+	{
+		fail("The nodes of the tube, of the detector, and of the edges of the beam are not where the setup puts them");
+		return;
+	}
+	const std::shared_ptr<Node> plate = node_manager->get_node_by_id(tube_display->get_node_ids()[Tube_Display::PLATE]);
+	std::cout << "[INFO::SIMULATOR_GUI::run_tube_display_test] the detector plate is at (" << plate->get_position().x << ", "
+			  << plate->get_position().y << ", " << plate->get_position().z << ") in the units of the view" << std::endl;
+
+	// another setup: the tube beside and above the scene, aimed at its centre, and the detector rolled
+	Xray_Setup other_setup;
+	other_setup.source_position = { 60.0f, 50.0f, -70.0f };
+	other_setup.roll            = 30.0f;
+	other_setup.aim_at({ 0.0f, 0.0f, 0.0f });
+	tube_display->update(other_setup, true);
+	if (!check_nodes(other_setup, true))
+	{
+		fail("The nodes did not follow another setup");
+		return;
+	}
+
+	// hidden: the nodes are not drawn, and the detector plate, selected before, is no longer selected
+	selection_manager->set_selected_node_id(tube_display->get_node_ids()[Tube_Display::PLATE]);
+	tube_display->update(other_setup, false);
+	if (!check_nodes(other_setup, false) || selection_manager->get_selected_node_id() != 0)
+	{
+		fail("The nodes were not hidden, or the hidden plate stayed selected");
+		return;
+	}
+
+	// a node deleted in the Engine (as the Delete key does) is created again when the display is shown
+	const std::uint32_t deleted_id = tube_display->get_node_ids()[Tube_Display::FIRST_EDGE];
+	selection_manager->set_selected_node_id(deleted_id);
+	selection_manager->delete_selected(node_manager.get());
+	tube_display->update(setup, true);
+	if (node_manager->get_node_by_id(deleted_id) || tube_display->get_node_ids()[Tube_Display::FIRST_EDGE] == deleted_id ||
+		!check_nodes(setup, true))
+	{
+		fail("The deleted edge of the beam was not created again where the setup puts it");
+		return;
+	}
+
+	std::cout << "[SUCCESS::SIMULATOR_GUI::run_tube_display_test] The 3D view shows the tube, the detector, and the edges of the beam "
+				 "where the setup puts them, and hides them on request"
 			  << std::endl;
 #endif
 }

@@ -81,12 +81,13 @@ if(XRSIM_BUILD_TESTS)
 		# object attenuates the beam where it projects and that the corners are not attenuated; then it changes the material of an
 		# object and deletes the node of another one, as the user does, and checks that the Engine's nodes, the scene, and the X-ray
 		# image follow; it clicks at the centre of the 3D view and checks which object is selected; and it orbits the camera of the
-		# 3D view about that object, pans it, and dollies it, and checks where the Engine's camera is. The smoke test above shows
-		# the image too, without checking it
+		# 3D view about that object, pans it, and dollies it, and checks where the Engine's camera is; and it checks that the tube, the
+		# detector, and the edges of the beam are drawn where the setup puts them, follow another setup, and can be hidden. The smoke
+		# test above shows the image too, without checking it
 		add_test(NAME XRSim_Xray_View_Test COMMAND XRSim --frames 3 --xray-view-test)
 		set_tests_properties(XRSim_Xray_View_Test PROPERTIES
 			LABELS smoke
-			PASS_REGULAR_EXPRESSION "SUCCESS::SIMULATOR_GUI::run_camera_test"
+			PASS_REGULAR_EXPRESSION "SUCCESS::SIMULATOR_GUI::run_tube_display_test"
 			FAIL_REGULAR_EXPRESSION "[[]ERROR"
 			TIMEOUT 300
 		)

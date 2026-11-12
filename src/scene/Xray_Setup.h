@@ -60,6 +60,10 @@ struct Xray_Setup
 	// Returns the width and the height of the detector, in centimetres
 	std::array<float, 2> get_detector_size() const;
 
+	// Returns the four corners of the detector plate, in centimetres: the top left, the top right, the bottom right, and the bottom left
+	// of the image as the simulator shows it (the edges of the beam go from the source to them)
+	std::array<std::array<float, 3>, 4> get_detector_corners() const;
+
 	// Projects a point of the scene (in centimetres) on the detector from the source. Returns false if the point is not in front of
 	// the source. The coordinates are in millimetres from the centre of the detector: x_on_detector grows to the right of the image
 	// as the simulator shows it (seen from the detector towards the source, which is +x of the scene for the default angles), and

@@ -4,8 +4,8 @@
  * It implements the Gui_Layer interface: the platform renderer owns the ImGui context and backends,
  * and calls this class to draw the windows every frame.
  * For now it draws a placeholder window, the list of the objects of the scene with the panel of the selected object (its data, and the
- * combo of its material), and the X-ray view of the scene (see Xray_View), it moves the camera of the 3D view with the mouse (see
- * update_camera), and
+ * combo of its material), and the X-ray view of the scene (see Xray_View) with the tube and the detector in the 3D view (see
+ * Tube_Display), it moves the camera of the 3D view with the mouse (see update_camera), and
  * it can run the self-test of the X-ray library inside the first frame (see run_xray_self_test), until the panels of the
  * simulator are written.
  */
@@ -22,6 +22,7 @@
 
 class Scene_Sync;
 #ifdef XRSIM_HAS_XRAY
+class Tube_Display;
 class Xray_View;
 #endif
 
@@ -90,6 +91,11 @@ private:
 	// run_selection_test, with the aluminium cube selected (--xray-view-test). It prints the result with the format of the Engine
 	void run_camera_test();
 
+	// Checks the display of the tube in the 3D view: its six nodes exist and are where the setup puts them, they follow another setup,
+	// they are hidden (and a selected one is no longer selected) when the display is off, and a node deleted in the Engine is created
+	// again. Runs after run_camera_test (--xray-view-test), and puts the display back. It prints the result with the format of the Engine
+	void run_tube_display_test();
+
 	// Private Attributes
 	// ------------------
 	std::shared_ptr<Scene>      scene;
@@ -99,10 +105,12 @@ private:
 	int                         selection_test_stage{ 0 }; // 0: not requested or done, 1: queue the click, 2: check the selection
 	int                         selection_test_tries{ 0 };
 	bool                        is_camera_test_requested{ false };
+	bool                        is_tube_display_test_requested{ false };
 	bool                        is_orbiting{ false }; // a drag with the right button started over the 3D view, and goes on
 	bool                        is_panning{ false };  // a drag with the middle button started over the 3D view, and goes on
 	std::array<float, 3>        camera_pivot{};       // the pivot of the drag, in centimetres
 #ifdef XRSIM_HAS_XRAY
-	std::unique_ptr<Xray_View> xray_view; // the X-ray image of the scene (only with the X-ray part)
+	std::unique_ptr<Xray_View>    xray_view;    // the X-ray image of the scene (only with the X-ray part)
+	std::unique_ptr<Tube_Display> tube_display; // the tube, the detector, and the edges of the beam in the 3D view
 #endif
 };
