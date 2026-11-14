@@ -501,18 +501,24 @@ void Xray_View::draw_setup_window()
 		"%.1f",
 		clamp_flag);
 
-	int width  = static_cast<int>(setup.width_in_pixels);
-	int height = static_cast<int>(setup.height_in_pixels);
+	// a new number of pixels needs a new adapter (tens of milliseconds, where the other values are updated in place in a few), so while
+	// the slider of the width or of the height is held, or a value is being typed in it, the new number is shown (and the detector of
+	// the 3D view follows it), and the image is computed again only when the slider is released or the typed value is entered
+	int  width  = static_cast<int>(setup.width_in_pixels);
+	int  height = static_cast<int>(setup.height_in_pixels);
+	bool is_pixel_count_being_edited{ false };
 	if (ImGui::SliderInt("Detector width (pixels)", &width, Xray_Setup::MIN_PIXELS, Xray_Setup::MAX_PIXELS, "%d", clamp_flag))
 	{
 		setup.width_in_pixels = static_cast<unsigned int>(width);
 		is_changed            = true;
 	}
+	is_pixel_count_being_edited |= ImGui::IsItemActive();
 	if (ImGui::SliderInt("Detector height (pixels)", &height, Xray_Setup::MIN_PIXELS, Xray_Setup::MAX_PIXELS, "%d", clamp_flag))
 	{
 		setup.height_in_pixels = static_cast<unsigned int>(height);
 		is_changed             = true;
 	}
+	is_pixel_count_being_edited |= ImGui::IsItemActive();
 
 	// the texts wrap at the right edge of the window, whatever its size
 	const float magnification = setup.get_magnification();
@@ -550,7 +556,7 @@ void Xray_View::draw_setup_window()
 
 	if (is_changed)
 		is_setup_dirty = true;
-	if (is_setup_dirty && (is_auto_recompute || is_apply_pressed))
+	if (is_setup_dirty && (is_auto_recompute || is_apply_pressed) && !is_pixel_count_being_edited)
 		apply_setup();
 
 	// the times of the last image, in milliseconds
