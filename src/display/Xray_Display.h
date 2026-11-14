@@ -4,12 +4,14 @@
  * detector; the screen needs a grey value between 0 and 255. The conversion is relative to the unattenuated beam (the brightest
  * pixel of the image, where the beam crossed no object): the transmission of a pixel is its value divided by that reference, and
  * it is shown as it is (linear) or by its logarithm (the objects of very different attenuation are all visible), and optionally
- * inverted (negative, as a radiograph is usually read). It has no dependency on OpenGL, on the Engine, or on the X-ray library,
- * so it is unit tested.
+ * inverted (negative, as a radiograph is usually read). The image can be shown as seen from the detector, looking back at the source,
+ * or as seen from the source, looking along the beam (the mirror image of the first). It has no dependency on OpenGL, on the Engine,
+ * or on the X-ray library, so it is unit tested.
  */
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -25,6 +27,7 @@ struct Xray_Display_Settings
 {
 	Xray_Display_Mode mode{ Xray_Display_Mode::LOGARITHMIC };
 	bool              is_negative{ false }; // true: the grey value is inverted (the attenuating objects are bright)
+	bool is_seen_from_source{ false }; // true: seen from the source, looking along the beam; false: seen from the detector, looking back
 };
 
 namespace Xray_Display
@@ -45,4 +48,9 @@ namespace Xray_Display
 	// Converts the image to grey values, one byte per pixel, in the order of the image (row by row, the first row is the bottom of
 	// the detector). The reference is the value of the unattenuated beam (see find_reference_value)
 	std::vector<std::uint8_t> convert_to_grey(const Xray_Image& image, float reference, const Xray_Display_Settings& settings);
+
+	// Returns the texture coordinates of the top-left and of the bottom-right corners of the image as it is drawn: u0, v0, u1, v1. The
+	// grey values are stored with the first row at the bottom of the detector and the first column at the left of the image seen from
+	// the detector, so the image is always flipped vertically, and also horizontally when it is seen from the source
+	std::array<float, 4> get_texture_corners(const Xray_Display_Settings& settings);
 } // namespace Xray_Display

@@ -51,3 +51,11 @@ namespace Xray_Display
 		return grey;
 	}
 } // namespace Xray_Display
+
+std::array<float, 4> Xray_Display::get_texture_corners(const Xray_Display_Settings& settings)
+{
+	// seen from the source, the left and the right of the image are swapped (the mirror image); the rows are flipped in both cases
+	if (settings.is_seen_from_source)
+		return { 1.0f, 1.0f, 0.0f, 0.0f };
+	return { 0.0f, 1.0f, 1.0f, 0.0f };
+}
