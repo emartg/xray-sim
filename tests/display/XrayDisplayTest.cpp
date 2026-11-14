@@ -5,6 +5,7 @@
  * check fails.
  */
 
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -112,6 +113,16 @@ int main()
 	}
 	check(Xray_Display::convert_to_grey(make_image(0, 0, {}), 1.0f, linear).empty(), "an empty image gives an empty result");
 	check(Xray_Display::convert_to_grey(image, 0.0f, linear) == std::vector<std::uint8_t>(6, 0), "a reference of 0 gives black");
+
+	// the corners of the texture: always flipped vertically; flipped horizontally too when the image is seen from the source
+	Xray_Display_Settings from_source;
+	from_source.is_seen_from_source = true;
+	check(
+		Xray_Display::get_texture_corners(linear) == std::array<float, 4>{ 0.0f, 1.0f, 1.0f, 0.0f },
+		"from the detector, only the rows are flipped");
+	check(
+		Xray_Display::get_texture_corners(from_source) == std::array<float, 4>{ 1.0f, 1.0f, 0.0f, 0.0f },
+		"from the source, the columns are flipped too");
 
 	if (failures != 0)
 		return 1;

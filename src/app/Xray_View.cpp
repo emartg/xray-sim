@@ -634,6 +634,11 @@ void Xray_View::draw_window()
 	}
 	if (ImGui::Checkbox("Negative", &display_settings.is_negative))
 		is_texture_dirty = true;
+	ImGui::SameLine();
+	ImGui::Checkbox("Seen from the source", &display_settings.is_seen_from_source); // only the drawing changes, not the texture
+	ImGui::SetItemTooltip(
+		"Off: the image is seen from the detector, looking back at the source, as the first 3D view looks.\n"
+		"On: the image is seen from the source, looking along the beam (left and right are swapped).");
 
 	if (!error.empty())
 	{
@@ -663,11 +668,13 @@ void Xray_View::draw_window()
 		update_texture();
 
 	if (texture != 0 && !is_single_view)
-	{ // the first row of the image is the bottom of the detector, which is the bottom of the texture: the image is flipped vertically
+	{ // the first row of the image is the bottom of the detector, which is the bottom of the texture: the image is flipped vertically,
+	  // and also horizontally when it is seen from the source (see Xray_Display::get_texture_corners)
 		ImVec2 offset;
 		ImVec2 size;
 		fit_in_area(ImGui::GetContentRegionAvail(), static_cast<float>(image.width) / static_cast<float>(image.height), offset, size);
-		ImGui::Image(get_texture_id(texture), size, ImVec2{ 0.0f, 1.0f }, ImVec2{ 1.0f, 0.0f });
+		const std::array<float, 4> corners = Xray_Display::get_texture_corners(display_settings);
+		ImGui::Image(get_texture_id(texture), size, ImVec2{ corners[0], corners[1] }, ImVec2{ corners[2], corners[3] });
 	}
 	else if (texture != 0)
 	{
@@ -684,14 +691,15 @@ void Xray_View::draw_background() const
 	ImVec2       size;
 	fit_in_area(display, static_cast<float>(image.width) / static_cast<float>(image.height), offset, size);
 
-	ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+	const std::array<float, 4> corners   = Xray_Display::get_texture_corners(display_settings);
+	ImDrawList*                draw_list = ImGui::GetBackgroundDrawList();
 	draw_list->AddRectFilled(ImVec2{ 0.0f, 0.0f }, display, IM_COL32(0, 0, 0, 255));
 	draw_list->AddImage(
 		get_texture_id(texture),
 		offset,
 		ImVec2{ offset.x + size.x, offset.y + size.y },
-		ImVec2{ 0.0f, 1.0f },
-		ImVec2{ 1.0f, 0.0f });
+		ImVec2{ corners[0], corners[1] },
+		ImVec2{ corners[2], corners[3] });
 }
 
 double Xray_View::get_transmission_at(float x, float y) const
