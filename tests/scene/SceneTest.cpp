@@ -126,6 +126,32 @@ namespace
 		check(
 			is_near(volume_of(cylinder), 10.0 * polygon_area, 1e-4),
 			"cylinder: the volume should be the height times the area of the polygon of its section");
+
+		const Shape_Data pyramid = Shape_Factory::make_pyramid();
+		check_shape(pyramid, "pyramid");
+		check(pyramid.get_vertex_count() == 16 && pyramid.indices.size() == 18, "pyramid: it should have 16 vertices and 6 triangles");
+		check(is_near(volume_of(pyramid), 1.0 / 3.0, 1e-6), "pyramid: the volume of a pyramid of base 1 and height 1 should be 1/3");
+	}
+
+	// Checks the ray test: the object that a ray meets first, through the triangles, in front of the origin of the ray
+	void test_ray()
+	{
+		const Scene scene = Scene::make_default_scene(); // water sphere at x = -9, cube at -2, cylinder at 5, iron sphere at 10
+		check(
+			scene.find_object_hit_by_ray({ -30.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }) == 0u,
+			"ray: from the left, the water sphere is met first");
+		check(
+			scene.find_object_hit_by_ray({ 30.0f, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f }) == 3u,
+			"ray: from the right, the iron sphere is met first");
+		check(
+			scene.find_object_hit_by_ray({ -2.0f, 20.0f, 0.0f }, { 0.0f, -2.0f, 0.0f }) == 1u,
+			"ray: from above the cube, the cube is met");
+		check(
+			scene.find_object_hit_by_ray({ 5.0f, 0.0f, 30.0f }, { 0.0f, 0.0f, -1.0f }) == 2u,
+			"ray: from the front of the cylinder, the cylinder is met");
+		check(!scene.find_object_hit_by_ray({ 0.0f, 30.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }), "ray: a ray above the objects meets nothing");
+		check(!scene.find_object_hit_by_ray({ -9.0f, 0.0f, 20.0f }, { 0.0f, 0.0f, 1.0f }), "ray: an object behind the origin is not met");
+		check(!scene.find_object_hit_by_ray({ -30.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }), "ray: a ray without a direction meets nothing");
 	}
 
 	void test_materials()
@@ -343,6 +369,7 @@ int main()
 	test_default_scene();
 	test_scene_changes();
 	test_scene_transforms();
+	test_ray();
 
 	if (failures != 0)
 	{

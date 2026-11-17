@@ -89,6 +89,20 @@ namespace
 			"the vectors are perpendicular");
 		check(is_near(right[1], 0.0), "the right of the view is horizontal");
 		check(up[1] > 0.0f, "the up of the view points upwards");
+
+		// the ray of a pixel: the centre of the view is the direction of the view, the right edge of the middle row is half the
+		// horizontal field of view to the right, and the top-left corner is up and to the left
+		const Orbit_Camera front_camera = make_front_camera();
+		check(
+			is_near(front_camera.get_ray_direction(400.0f, 300.0f, 800.0f, 600.0f, 45.0f), front_camera.get_front()),
+			"the ray of the centre is the view");
+		const std::array<float, 3> right_edge   = front_camera.get_ray_direction(800.0f, 300.0f, 800.0f, 600.0f, 45.0f);
+		const double               half_angle_x = std::atan(std::tan(22.5 * 3.14159265358979 / 180.0) * 800.0 / 600.0);
+		check(is_near(right_edge[0], std::sin(half_angle_x)) && is_near(right_edge[1], 0.0), "the ray of the right edge");
+		const std::array<float, 3> corner = front_camera.get_ray_direction(0.0f, 0.0f, 800.0f, 600.0f, 45.0f);
+		check(
+			corner[0] < 0.0f && corner[1] > 0.0f && corner[2] < 0.0f && is_near(dot(corner, corner), 1.0),
+			"the ray of the top-left corner");
 	}
 
 	// Checks the orbit: the direction that the mouse turns the scene, the distance and the place of the pivot that it keeps, and the

@@ -21,6 +21,7 @@
 
 #include "display/Xray_Display.h"
 #include "scene/Scene.h"
+#include "Tube_Display.h"
 #include "scene/Xray_Setup.h"
 #include "xray/Xray_Types.h"
 
@@ -78,8 +79,11 @@ public:
 	// Returns the setup that the user chooses in the X-ray setup window (the one of the image while it is applied)
 	const Xray_Setup& get_setup() const { return setup; }
 
-	// Returns whether the user wants the tube, the detector, and the edges of the beam drawn in the 3D view (see Tube_Display)
+	// Returns whether the user wants the tube, the detector, and the beam drawn in the 3D view (see Tube_Display)
 	bool get_is_tube_shown() const { return is_tube_shown; }
+
+	// Returns the look of the tube, the detector, and the beam in the 3D view that the user chooses (see Tube_Display_Style)
+	const Tube_Display_Style& get_tube_style() const { return tube_style; }
 
 	// The reason why the last change of the scene or of the setup was not computed (the source or the centre of the detector is inside an
 	// object), or an empty string. The last image stays on the screen while there is a reason
@@ -105,6 +109,9 @@ private:
 	// Draws the controls of the setup and the times of the last image. The changes are applied when they are made, or with the button
 	// if the option is off
 	void draw_setup_window();
+
+	// Draws the display options of the tube, the detector, and the beam in the 3D view (a collapsing header of the setup window)
+	void draw_tube_options();
 
 	// Returns how many images apply_setup computed in the last few seconds, and keeps the highest number
 	unsigned int get_images_in_last_seconds();
@@ -144,11 +151,12 @@ private:
 	std::string                        geometry_problem;      // why the scene or the setup was not computed; empty if it was
 	bool is_console_output_enabled{ false }; // true: every image prints its times to the console (the user's option, and the check's)
 
-	Xray_Setup setup;                     // the values that the user chooses
-	Xray_Setup image_setup;               // the values of the current image
-	bool       is_auto_recompute{ true }; // true: the image is computed again whenever a value of the setup changes
-	bool       is_setup_dirty{ false };   // true: a value of the setup changed and is not applied yet
-	bool       is_tube_shown{ true };     // true: the 3D view draws the tube, the detector, and the edges of the beam
+	Xray_Setup         setup;                     // the values that the user chooses
+	Xray_Setup         image_setup;               // the values of the current image
+	bool               is_auto_recompute{ true }; // true: the image is computed again whenever a value of the setup changes
+	bool               is_setup_dirty{ false };   // true: a value of the setup changed and is not applied yet
+	bool               is_tube_shown{ true };     // true: the 3D view draws the tube, the detector, and the beam
+	Tube_Display_Style tube_style;                // their look: what is shown, the colours, the transparency, and the sizes
 
 	// Times of the last image, in milliseconds (the ones of the adapter are in timings)
 	Xray_Timings timings;

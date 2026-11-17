@@ -553,6 +553,7 @@ void Xray_View::draw_setup_window()
 	}
 	ImGui::Checkbox("Print the times to the console", &is_console_output_enabled);
 	ImGui::Checkbox("Show the tube and the detector in the 3D view", &is_tube_shown);
+	draw_tube_options();
 
 	if (is_changed)
 		is_setup_dirty = true;
@@ -601,6 +602,71 @@ void Xray_View::draw_setup_window()
 		ImGui::GetIO().Framerate);
 
 	ImGui::End();
+}
+
+void Xray_View::draw_tube_options()
+{
+	if (!ImGui::CollapsingHeader("Display options of the tube, the detector, and the beam"))
+		return;
+
+	// the options only change the look of the 3D view, never the X-ray image; they are greyed out while the display is off
+	ImGui::BeginDisabled(!is_tube_shown);
+	const int  clamp_flag   = ImGuiSliderFlags_AlwaysClamp;
+	const int  colour_flags = ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_AlphaPreviewHalf;
+	const auto part_line    = [&](const char* label, Tube_Display_Style::Part& part) {
+		ImGui::PushID(label);
+		ImGui::Checkbox("##shown", &part.is_shown);
+		ImGui::SameLine();
+		ImGui::ColorEdit4(label, part.colour.data(), colour_flags);
+		ImGui::PopID();
+	};
+
+	part_line("Volume of the beam", tube_style.volume);
+	ImGui::PushID("edges");
+	ImGui::Checkbox("##shown", &tube_style.edges.is_shown);
+	ImGui::SameLine();
+	ImGui::BeginDisabled(tube_style.are_edges_linked_to_volume);
+	ImGui::ColorEdit4("Edges of the beam", tube_style.edges.colour.data(), colour_flags);
+	ImGui::EndDisabled();
+	ImGui::PopID();
+	ImGui::Checkbox("Edges in the colour of the volume (opaque)", &tube_style.are_edges_linked_to_volume);
+	ImGui::DragFloat(
+		"Edge thickness (cm)",
+		&tube_style.edge_thickness,
+		0.01f,
+		Tube_Display_Style::MIN_EDGE_THICKNESS,
+		Tube_Display_Style::MAX_EDGE_THICKNESS,
+		"%.2f",
+		clamp_flag);
+	part_line("Detector plate", tube_style.plate);
+	ImGui::DragFloat(
+		"Plate thickness (cm)",
+		&tube_style.plate_thickness,
+		0.05f,
+		Tube_Display_Style::MIN_PLATE_THICKNESS,
+		Tube_Display_Style::MAX_PLATE_THICKNESS,
+		"%.2f",
+		clamp_flag);
+	part_line("Tube housing", tube_style.housing);
+	ImGui::DragFloat(
+		"Housing radius (cm)",
+		&tube_style.housing_radius,
+		0.1f,
+		Tube_Display_Style::MIN_HOUSING_RADIUS,
+		Tube_Display_Style::MAX_HOUSING_RADIUS,
+		"%.1f",
+		clamp_flag);
+	ImGui::DragFloat(
+		"Housing length (cm)",
+		&tube_style.housing_length,
+		0.1f,
+		Tube_Display_Style::MIN_HOUSING_LENGTH,
+		Tube_Display_Style::MAX_HOUSING_LENGTH,
+		"%.1f",
+		clamp_flag);
+	if (ImGui::Button("Reset the display options"))
+		tube_style = Tube_Display_Style{};
+	ImGui::EndDisabled();
 }
 
 void Xray_View::draw_window()

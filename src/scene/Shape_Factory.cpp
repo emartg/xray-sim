@@ -171,3 +171,39 @@ double Shape_Factory::compute_signed_volume(
 	}
 	return volume;
 }
+
+Shape_Data Shape_Factory::make_pyramid()
+{
+	Shape_Data shape;
+
+	// the apex and the four corners of the base, counter-clockwise seen from +z
+	const float apex[3]{ 0.0f, 0.0f, 0.0f };
+	const float base[4][3]{ { -0.5f, -0.5f, 1.0f }, { 0.5f, -0.5f, 1.0f }, { 0.5f, 0.5f, 1.0f }, { -0.5f, 0.5f, 1.0f } };
+
+	// the four sides: the apex and two corners of the base, counter-clockwise seen from outside, each with its own normal vector
+	for (int i = 0; i < 4; ++i)
+	{
+		const float* a = apex;
+		const float* b = base[(i + 1) % 4];
+		const float* c = base[i];
+		const float  u[3]{ b[0] - a[0], b[1] - a[1], b[2] - a[2] };
+		const float  v[3]{ c[0] - a[0], c[1] - a[1], c[2] - a[2] };
+		float        n[3]{ u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0] };
+		const float  length = std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]);
+		for (float& component : n) component /= length;
+
+		const auto first = static_cast<std::uint32_t>(shape.get_vertex_count());
+		add_vertex(shape, a[0], a[1], a[2], n[0], n[1], n[2], 0.5f, 0.0f);
+		add_vertex(shape, b[0], b[1], b[2], n[0], n[1], n[2], 1.0f, 1.0f);
+		add_vertex(shape, c[0], c[1], c[2], n[0], n[1], n[2], 0.0f, 1.0f);
+		shape.indices.insert(shape.indices.end(), { first, first + 1, first + 2 });
+	}
+
+	// the base, facing +z (outside)
+	const auto first = static_cast<std::uint32_t>(shape.get_vertex_count());
+	for (int i = 0; i < 4; ++i)
+		add_vertex(shape, base[i][0], base[i][1], base[i][2], 0.0f, 0.0f, 1.0f, base[i][0] + 0.5f, base[i][1] + 0.5f);
+	add_quad(shape, first, first + 1, first + 2, first + 3);
+
+	return shape;
+}

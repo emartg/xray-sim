@@ -6,6 +6,8 @@
 #include "scene/Scene.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -232,6 +234,54 @@ std::array<float, 16> Scene::get_xray_transform(std::size_t object_index) const
 	const glm::mat4       matrix = object_index < objects.size() ? make_xray_model_matrix(objects[object_index]) : glm::mat4{ 1.0f };
 	std::copy_n(glm::value_ptr(matrix), transform.size(), transform.begin());
 	return transform;
+}
+
+std::optional<std::size_t> Scene::find_object_hit_by_ray(const std::array<float, 3>& origin, const std::array<float, 3>& direction) const
+{
+	const glm::vec3 ray_origin{ origin[0], origin[1], origin[2] };
+	const glm::vec3 ray_direction{ direction[0], direction[1], direction[2] };
+	if (glm::length(ray_direction) == 0.0f)
+		return std::nullopt;
+
+	std::optional<std::size_t> nearest_object;
+	float                      nearest_distance{ std::numeric_limits<float>::max() }; // along the ray, in units of the direction
+	for (std::size_t index = 0; index < objects.size(); ++index)
+	{
+		const Scene_Object& object   = objects[index];
+		const glm::mat4     model    = make_model_matrix(object);
+		const auto&         vertices = object.shape.vertices;
+		const auto          position = [&](std::uint32_t vertex) {
+			const std::size_t first = static_cast<std::size_t>(vertex) * Shape_Data::FLOATS_PER_VERTEX;
+			return glm::vec3{ model * glm::vec4{ vertices[first], vertices[first + 1], vertices[first + 2], 1.0f } };
+		};
+
+		// every triangle in the space of the scene, tested with the method of Moller and Trumbore
+		for (std::size_t i = 0; i + 2 < object.shape.indices.size(); i += 3)
+		{
+			const glm::vec3 a           = position(object.shape.indices[i]);
+			const glm::vec3 edge_1      = position(object.shape.indices[i + 1]) - a;
+			const glm::vec3 edge_2      = position(object.shape.indices[i + 2]) - a;
+			const glm::vec3 p           = glm::cross(ray_direction, edge_2);
+			const float     determinant = glm::dot(edge_1, p);
+			if (std::abs(determinant) < 1e-9f)
+				continue; // the ray is parallel to the triangle
+			const glm::vec3 to_origin = ray_origin - a;
+			const float     u         = glm::dot(to_origin, p) / determinant;
+			if (u < 0.0f || u > 1.0f)
+				continue;
+			const glm::vec3 q = glm::cross(to_origin, edge_1);
+			const float     v = glm::dot(ray_direction, q) / determinant;
+			if (v < 0.0f || u + v > 1.0f)
+				continue;
+			const float distance = glm::dot(edge_2, q) / determinant;
+			if (distance > 0.0f && distance < nearest_distance)
+			{
+				nearest_distance = distance;
+				nearest_object   = index;
+			}
+		}
+	}
+	return nearest_object;
 }
 
 const Scene_Object* Scene::find_object_around_point(const std::array<float, 3>& point) const
