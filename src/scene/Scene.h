@@ -12,6 +12,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -91,6 +92,10 @@ public:
 	// Returns the first object whose bounding sphere (its centre is the position of the object, its radius the farthest vertex times the
 	// largest scale) contains the point, in centimetres, or null if there is none. The tube must stay outside of the objects
 	const Scene_Object* find_object_around_point(const std::array<float, 3>& point) const;
+
+	// Returns the index of the object whose triangles a ray meets first (the origin and the direction in centimetres; the direction
+	// need not be a unit vector), or nothing if the ray meets no object in front of its origin. Both sides of a triangle count
+	std::optional<std::size_t> find_object_hit_by_ray(const std::array<float, 3>& origin, const std::array<float, 3>& direction) const;
 
 	// Returns the first object whose bounding sphere touches a rectangle (the detector plate), or null if there is none. The rectangle
 	// is given by its centre, two perpendicular unit vectors along its sides, and its half width and half height, in centimetres

@@ -50,6 +50,21 @@ std::array<float, 3> Orbit_Camera::get_up() const
 	return to_array(glm::normalize(glm::cross(to_vec3(get_right()), to_vec3(get_front()))));
 }
 
+std::array<float, 3> Orbit_Camera::get_ray_direction(float x, float y, float view_width, float view_height, float field_of_view) const
+{
+	if (view_width <= 0.0f || view_height <= 0.0f)
+		return get_front();
+
+	// the pixel in normalised coordinates (-1 to 1, y up), and the half size of the view at a distance of 1
+	const float     half_height = std::tan(glm::radians(field_of_view) / 2.0f);
+	const float     half_width  = half_height * view_width / view_height;
+	const float     ndc_x       = 2.0f * x / view_width - 1.0f;
+	const float     ndc_y       = 1.0f - 2.0f * y / view_height;
+	const glm::vec3 direction =
+		to_vec3(get_front()) + to_vec3(get_right()) * (ndc_x * half_width) + to_vec3(get_up()) * (ndc_y * half_height);
+	return to_array(glm::normalize(direction));
+}
+
 float Orbit_Camera::get_depth_of(const std::array<float, 3>& point) const
 {
 	return glm::dot(to_vec3(point) - to_vec3(position), to_vec3(get_front()));

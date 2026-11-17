@@ -76,6 +76,12 @@ private:
 	// movements of the mouse, in pixels), and dollies towards the pivot of the moment by the turns of the wheel, in notches
 	void move_camera(float orbit_x, float orbit_y, float pan_x, float pan_y, float wheel);
 
+	// A workaround until the Engine can leave a node out of its picking: the Engine picks the transparent volume of the beam like any
+	// node, so a click on an object inside the beam selects the volume. When the volume is selected, the last click over the 3D view is
+	// resolved again through the triangles of the objects of the scene (Scene::find_object_hit_by_ray): the nearest object is
+	// selected, or nothing
+	void resolve_pick_through_volume();
+
 	// Changes the material of an object and deletes the node of another one, as the user does, and checks that the colour of the node,
 	// the scene, and the X-ray image follow. Runs once, after the checks of the first X-ray image (--xray-view-test). It prints the
 	// result with the format of the Engine
@@ -91,9 +97,10 @@ private:
 	// run_selection_test, with the aluminium cube selected (--xray-view-test). It prints the result with the format of the Engine
 	void run_camera_test();
 
-	// Checks the display of the tube in the 3D view: its six nodes exist and are where the setup puts them, they follow another setup,
-	// they are hidden (and a selected one is no longer selected) when the display is off, and a node deleted in the Engine is created
-	// again. Runs after run_camera_test (--xray-view-test), and puts the display back. It prints the result with the format of the Engine
+	// Checks the display of the tube in the 3D view: its seven nodes exist and are where the setup puts them, they follow another setup
+	// and another style (a hidden part, colours, a size), they are hidden (and a selected one is no longer selected) when the display is
+	// off, a node deleted in the Engine is created again, and a click through the volume of the beam selects the object behind it. Runs
+	// after run_camera_test (--xray-view-test), and puts the display back. It prints the result with the format of the Engine
 	void run_tube_display_test();
 
 	// Private Attributes
@@ -109,6 +116,8 @@ private:
 	bool                        is_orbiting{ false }; // a drag with the right button started over the 3D view, and goes on
 	bool                        is_panning{ false };  // a drag with the middle button started over the 3D view, and goes on
 	std::array<float, 3>        camera_pivot{};       // the pivot of the drag, in centimetres
+	std::array<float, 2>        last_click{};         // the last left click over the 3D view, in pixels from the top-left corner
+	bool                        has_last_click{ false };
 #ifdef XRSIM_HAS_XRAY
 	std::unique_ptr<Xray_View>    xray_view;    // the X-ray image of the scene (only with the X-ray part)
 	std::unique_ptr<Tube_Display> tube_display; // the tube, the detector, and the edges of the beam in the 3D view

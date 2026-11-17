@@ -296,7 +296,8 @@ void Simulator_Gui::draw()
 		xray_view->draw();
 
 		// the tube, the detector, and the edges of the beam follow the setup that the user chooses, before the Engine draws the scene
-		tube_display->update(xray_view->get_setup(), xray_view->get_is_tube_shown());
+		tube_display->update(xray_view->get_setup(), xray_view->get_is_tube_shown(), xray_view->get_tube_style());
+		resolve_pick_through_volume();
 
 		// after the checks of the first image, the changes of the scene are checked once
 		if (is_scene_change_test_requested && xray_view->get_is_check_passed())
@@ -435,6 +436,13 @@ void Simulator_Gui::update_camera()
 	}
 #endif
 
+	// the last left click over the 3D view, which the Engine picks (see resolve_pick_through_volume)
+	if (is_over_view && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+	{
+		last_click     = { io.MousePos.x, io.MousePos.y };
+		has_last_click = true;
+	}
+
 	// a drag starts when its button is pressed over the 3D view, with the pivot of that moment, and goes on while the button is held
 	// (also over a window of the GUI)
 	if (is_over_view && (ImGui::IsMouseClicked(ImGuiMouseButton_Right) || ImGui::IsMouseClicked(ImGuiMouseButton_Middle)))
@@ -478,6 +486,32 @@ void Simulator_Gui::move_camera(float orbit_x, float orbit_y, float pan_x, float
 	if (wheel != 0.0f)
 		view.dolly(get_camera_pivot(), wheel);
 	set_engine_view(*camera, view);
+}
+
+void Simulator_Gui::resolve_pick_through_volume()
+{
+#ifdef XRSIM_HAS_XRAY
+	Core* engine = Core::get_instance();
+	if (!tube_display || !scene || !scene_sync || !has_last_click || !engine || !engine->get_selection_manager())
+		return;
+	auto&               selection_manager = engine->get_selection_manager();
+	const std::uint32_t volume_id         = tube_display->get_node_ids()[Tube_Display::VOLUME];
+	if (volume_id == 0 || selection_manager->get_selected_node_id() != volume_id)
+		return;
+
+	// the ray of the click, from the camera, through the objects of the scene (in centimetres)
+	const std::shared_ptr<Camera> camera = get_engine_camera();
+	std::optional<std::size_t>    hit;
+	if (camera)
+	{
+		const Orbit_Camera view    = get_engine_view(*camera);
+		const ImVec2       display = ImGui::GetIO().DisplaySize;
+		hit                        = scene->find_object_hit_by_ray(
+			view.position,
+			view.get_ray_direction(last_click[0], last_click[1], display.x, display.y, camera->get_zoom()));
+	}
+	selection_manager->set_selected_node_id(hit ? scene_sync->get_node_id(*hit) : 0);
+#endif
 }
 
 void Simulator_Gui::run_scene_change_test()
@@ -679,6 +713,8 @@ void Simulator_Gui::run_selection_test()
 	if (selection_test_stage == 1)
 	{ // the click: the centre of the window, in screen coordinates, and the size of the framebuffer
 		const ImGuiIO& io = ImGui::GetIO();
+		last_click        = { io.DisplaySize.x / 2.0f, io.DisplaySize.y / 2.0f }; // as a click of the user would record it
+		has_last_click    = true;
 		engine->get_selection_manager()->queue_pick(
 			io.DisplaySize.x / 2.0f,
 			io.DisplaySize.y / 2.0f,
@@ -803,7 +839,7 @@ void Simulator_Gui::run_tube_display_test()
 	};
 
 	Core* engine = Core::get_instance();
-	if (!engine || !engine->get_node_manager() || !engine->get_selection_manager() || !xray_view || !tube_display)
+	if (!engine || !engine->get_node_manager() || !engine->get_selection_manager() || !xray_view || !tube_display || !scene || !scene_sync)
 	{
 		fail("The Engine or the display of the tube are not ready");
 		return;
@@ -811,51 +847,63 @@ void Simulator_Gui::run_tube_display_test()
 	auto& node_manager      = engine->get_node_manager();
 	auto& selection_manager = engine->get_selection_manager();
 
-	// checks that every node exists, is visible or hidden as asked, and has the placement of its part for a setup
-	const auto check_nodes = [&](const Xray_Setup& setup, bool should_be_visible) {
+	// checks that every node exists, is visible or hidden as the display and the style ask, and has the placement and the colour of
+	// its part for a setup and a style
+	const auto check_nodes = [&](const Xray_Setup& setup, const Tube_Display_Style& style, bool is_shown) {
 		for (std::size_t part = 0; part < Tube_Display::NODE_COUNT; ++part)
 		{
 			const std::shared_ptr<Node> node = node_manager->get_node_by_id(tube_display->get_node_ids()[part]);
-			if (!node || node->get_is_visible() != should_be_visible)
+			if (!node || node->get_is_visible() != (is_shown && Tube_Display::get_is_part_shown(style, part)))
 				return false;
-			const Tube_Display::Part_Placement placement = Tube_Display::get_placement(setup, part);
+			const Tube_Display::Part_Placement placement = Tube_Display::get_placement(setup, style, part);
 			if (glm::length(node->get_position() - Scene_Builder::to_view(placement.centre)) > 1e-4f ||
 				glm::length(node->get_scale() - Scene_Builder::to_view(placement.size)) > 1e-4f)
 				return false;
 			const glm::vec3 axis = node->get_rotation() * glm::vec3{ 0.0f, 0.0f, 1.0f };
 			if (glm::length(axis - glm::vec3{ placement.axes[2][0], placement.axes[2][1], placement.axes[2][2] }) > 1e-4f)
 				return false;
+			const std::array<float, 4> colour = Tube_Display::get_part_colour(style, part);
+			if (node->get_albedo() != glm::vec4{ colour[0], colour[1], colour[2], colour[3] })
+				return false;
 		}
 		return true;
 	};
 
-	// the setup of the X-ray view: the housing on the source, the plate on the detector, and the edges to its corners
-	const Xray_Setup& setup = xray_view->get_setup();
-	if (!xray_view->get_is_tube_shown() || !check_nodes(setup, true))
+	// the setup and the style of the X-ray view: the housing on the source, the plate on the detector, the edges to its corners, and
+	// the volume of the beam between them
+	const Xray_Setup&         setup = xray_view->get_setup();
+	const Tube_Display_Style& style = xray_view->get_tube_style();
+	if (!xray_view->get_is_tube_shown() || !check_nodes(setup, style, true))
 	{
-		fail("The nodes of the tube, of the detector, and of the edges of the beam are not where the setup puts them");
+		fail("The nodes of the tube, of the detector, and of the beam are not where the setup puts them");
 		return;
 	}
 	const std::shared_ptr<Node> plate = node_manager->get_node_by_id(tube_display->get_node_ids()[Tube_Display::PLATE]);
 	std::cout << "[INFO::SIMULATOR_GUI::run_tube_display_test] the detector plate is at (" << plate->get_position().x << ", "
 			  << plate->get_position().y << ", " << plate->get_position().z << ") in the units of the view" << std::endl;
 
-	// another setup: the tube beside and above the scene, aimed at its centre, and the detector rolled
+	// another setup, the tube beside and above the scene, aimed at its centre, with the detector rolled; and another style, the volume
+	// hidden, a transparent red plate, green edges through the volume's colour, and a wider housing
 	Xray_Setup other_setup;
 	other_setup.source_position = { 60.0f, 50.0f, -70.0f };
 	other_setup.roll            = 30.0f;
 	other_setup.aim_at({ 0.0f, 0.0f, 0.0f });
-	tube_display->update(other_setup, true);
-	if (!check_nodes(other_setup, true))
+	Tube_Display_Style other_style;
+	other_style.volume.is_shown = false;
+	other_style.volume.colour   = { 0.0f, 1.0f, 0.0f, 0.3f };
+	other_style.plate.colour    = { 1.0f, 0.0f, 0.0f, 0.5f };
+	other_style.housing_radius  = 12.0f;
+	tube_display->update(other_setup, true, other_style);
+	if (!check_nodes(other_setup, other_style, true) || other_style.get_edge_colour() != std::array<float, 4>{ 0.0f, 1.0f, 0.0f, 1.0f })
 	{
-		fail("The nodes did not follow another setup");
+		fail("The nodes did not follow another setup and another style");
 		return;
 	}
 
 	// hidden: the nodes are not drawn, and the detector plate, selected before, is no longer selected
 	selection_manager->set_selected_node_id(tube_display->get_node_ids()[Tube_Display::PLATE]);
-	tube_display->update(other_setup, false);
-	if (!check_nodes(other_setup, false) || selection_manager->get_selected_node_id() != 0)
+	tube_display->update(other_setup, false, other_style);
+	if (!check_nodes(other_setup, other_style, false) || selection_manager->get_selected_node_id() != 0)
 	{
 		fail("The nodes were not hidden, or the hidden plate stayed selected");
 		return;
@@ -865,16 +913,30 @@ void Simulator_Gui::run_tube_display_test()
 	const std::uint32_t deleted_id = tube_display->get_node_ids()[Tube_Display::FIRST_EDGE];
 	selection_manager->set_selected_node_id(deleted_id);
 	selection_manager->delete_selected(node_manager.get());
-	tube_display->update(setup, true);
+	tube_display->update(setup, true, style);
 	if (node_manager->get_node_by_id(deleted_id) || tube_display->get_node_ids()[Tube_Display::FIRST_EDGE] == deleted_id ||
-		!check_nodes(setup, true))
+		!check_nodes(setup, style, true))
 	{
 		fail("The deleted edge of the beam was not created again where the setup puts it");
 		return;
 	}
 
-	std::cout << "[SUCCESS::SIMULATOR_GUI::run_tube_display_test] The 3D view shows the tube, the detector, and the edges of the beam "
-				 "where the setup puts them, and hides them on request"
+	// a click at the centre of the 3D view picks the volume of the beam, in front of the cube: it is resolved through the objects
+	selection_manager->set_selected_node_id(tube_display->get_node_ids()[Tube_Display::VOLUME]);
+	last_click     = { ImGui::GetIO().DisplaySize.x / 2.0f, ImGui::GetIO().DisplaySize.y / 2.0f };
+	has_last_click = true;
+	resolve_pick_through_volume();
+	const std::optional<std::size_t> selected = scene_sync->get_selected_object();
+	if (!selected || scene->get_objects()[*selected].name != "Aluminium Cube")
+	{
+		fail("A click through the volume of the beam did not select the aluminium cube behind it");
+		return;
+	}
+	selection_manager->set_selected_node_id(0);
+
+	std::cout << "[SUCCESS::SIMULATOR_GUI::run_tube_display_test] The 3D view shows the tube, the detector, the edges, and the volume of "
+				 "the beam where the setup puts them, with the style of the user, hides them on request, and a click through the volume "
+				 "selects the object behind it"
 			  << std::endl;
 #endif
 }

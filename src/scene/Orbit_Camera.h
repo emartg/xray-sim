@@ -39,6 +39,11 @@ struct Orbit_Camera
 	// Returns the up of the view, a unit vector perpendicular to the direction and to the right
 	std::array<float, 3> get_up() const;
 
+	// Returns the direction of the ray from the camera through a pixel of the view, a unit vector: the pixel in pixels from the top-left
+	// corner (x to the right, y down), the size of the view in pixels, and the vertical field of view in degrees (the centre of the view
+	// gives the direction of the view)
+	std::array<float, 3> get_ray_direction(float x, float y, float view_width, float view_height, float field_of_view) const;
+
 	// Returns the distance from the camera to a point along the direction of the view (negative if the point is behind the camera)
 	float get_depth_of(const std::array<float, 3>& point) const;
 

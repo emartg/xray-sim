@@ -29,6 +29,10 @@ public:
 	// of slices around it
 	static Shape_Data make_cylinder(float radius, float height, unsigned int slices = 32);
 
+	// Creates a pyramid with its apex at the origin and its square base, of side 1, at z = 1, centred on the axis z. It is not centred
+	// at the origin like the other shapes: it is the shape of a beam from a point source, which a scale stretches to a detector
+	static Shape_Data make_pyramid();
+
 	// Returns the signed volume enclosed by triangles whose vertices are stored with the given number of floats each
 	// (the position comes first). It is positive for a closed surface with its triangles counter-clockwise seen from
 	// outside, which makes it a check of the orientation and of the closure of a shape
