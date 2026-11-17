@@ -55,6 +55,8 @@ jobs:
         # the Git LFS files of gVirtualXRay (data and assets) are not needed, and GitHub charges their bandwidth
         env:
           GIT_LFS_SKIP_SMUDGE: 1
+        # a clone that hangs on the network fails after 10 minutes, so that the failed job can be run again at once
+        timeout-minutes: 10
         run: git submodule update --init --depth 1 -- engine gvirtual-xray
 
       - name: Install the dependencies
@@ -119,6 +121,8 @@ jobs:
         # the Git LFS files of gVirtualXRay (data and assets) are not needed, and GitHub charges their bandwidth
         env:
           GIT_LFS_SKIP_SMUDGE: 1
+        # a clone that hangs on the network fails after 10 minutes, so that the failed job can be run again at once
+        timeout-minutes: 10
         run: git submodule update --init --depth 1 -- engine gvirtual-xray
 
       - name: Set up the MSVC developer environment
