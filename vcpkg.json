@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "xray-sim",
-  "builtin-baseline": "434307da09bc05b2c86996dccc8b2351fc0d5d37",
+  "builtin-baseline": "504152f3f2a9fc3290c4214d05ff641be2c9b4c1",
   "dependencies": [
     "assimp",
     "boost-interprocess",
