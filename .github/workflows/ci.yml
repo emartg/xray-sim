@@ -101,14 +101,14 @@ jobs:
         include:
           - preset: ninja-msvc-debug
             toolchain: msvc
-            triplet: x64-windows-xray-ci
+            triplet: x64-windows-ci
             generator: Ninja
             build-type: Debug
             c-compiler: cl
             cxx-compiler: cl
           - preset: mingw-gcc-vcpkg-release
             toolchain: mingw
-            triplet: x64-mingw-dynamic-xray-ci
+            triplet: x64-mingw-dynamic-ci
             generator: MinGW Makefiles
             build-type: Release
             c-compiler: gcc
@@ -184,13 +184,13 @@ jobs:
             vcpkg-${{ matrix.triplet }}-${{ steps.compiler.outputs.version }}-${{ steps.compiler.outputs.tools }}-
 
       - name: Configure
-        # vcpkg installs the dependencies of the manifest during the configuration (from the cache when available).
-        # The target triplet is the CI one, and the host triplet is x64-windows-ci: both leave the compiler out of the ABI
-        # hash of the packages, because the runner images change the build of the compiler (Visual Studio 18.10.2 and 18.10.3
-        # have the same toolset) and the tools of vcpkg, which every package depends on, are built with cl.exe; and the PATH
-        # is not part of the hash (see cmake/vcpkg_triplets). A compiler upgrade does not rebuild a package in the CI: the key
-        # of the cache has the version of the compiler. The debug output of vcpkg (the entries of the hash) goes to a file that
-        # the next step summarizes
+        # vcpkg installs the dependencies of the manifest during the configuration (from the cache when available). The
+        # target triplet is the CI one (x64-windows-ci for MSVC, x64-mingw-dynamic-ci for MinGW), and the host triplet is
+        # x64-windows-ci: both leave the compiler out of the ABI hash of the packages, because the runner images change the
+        # build of the compiler (Visual Studio 18.10.2 and 18.10.3 have the same toolset) and the tools of vcpkg, which every
+        # package depends on, are built with cl.exe; and the PATH is not part of the hash (see cmake/vcpkg_triplets). A
+        # compiler upgrade does not rebuild a package in the CI: the key of the cache has the version of the compiler. The
+        # debug output of vcpkg (the entries of the hash) goes to a file that the next step summarizes
         shell: pwsh
         run: |
           cmake --preset ${{ matrix.preset }} -DXRSIM_BUILD_TESTS=ON "-DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }}" "-DVCPKG_HOST_TRIPLET=x64-windows-ci" "-DVCPKG_INSTALL_OPTIONS=--debug" *> "$env:RUNNER_TEMP\configure.log"

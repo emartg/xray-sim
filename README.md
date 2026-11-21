@@ -9,7 +9,7 @@ It allows radiology professionals and students to test X-ray scanning and imagin
 - `gvirtual-xray/`: Git submodule with the [fork of gVirtualXRay](https://github.com/emartg/gvirtual-xray) that computes the X-ray images.
 - `src/`: the code of the simulator, which connects both: the application (`src/app`), the description of the scenes, the materials, and the X-ray setup (`src/scene`), the conversion of an X-ray image to grey values (`src/display`), and the library that adapts gVirtualXRay (`src/xray`).
 - `tests/`: the tests of the simulator's libraries and of its build.
-- `cmake/`: the vcpkg triplets used by the Windows presets, and the check that the submodules are at the commits that the repository records.
+- `cmake/`: the vcpkg triplets of the MinGW presets and of the continuous integration, and the check that the submodules are at the commits that the repository records.
 - `CHANGELOG.md`: the changes of the project, version by version.
 - `docs/`: documentation (the build instructions and the credits of the third-party libraries and resources).
 

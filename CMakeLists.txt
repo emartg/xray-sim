@@ -80,15 +80,14 @@ if(XRSIM_BUILD_XRAY)
 
 	# Use the packages of the dependencies (the system packages on Linux, vcpkg on Windows), instead of building them from sources
 	set(USE_SYSTEM_GLEW ON)
+	# GLEW as a shared library (Ubuntu's libGLEW.so, the glew32.dll of vcpkg's standard triplets): gVirtualXRay keeps this choice
+	# and then links GLEW::GLEW without GLEW_STATIC (its default is the static library)
+	set(GLEW_USE_STATIC_LIBS OFF)
 	set(USE_SYSTEM_ASSIMP ON)
 	set(USE_SYSTEM_ZLIB ON)
 	set(USE_SYSTEM_LIBTIFF ON)
 	set(USE_SYSTEM_FREETYPE ON)
 	set(USE_SYSTEM_BOOST ON)
-
-	# The simulator does not use Vulkan, and gVirtualXRay only supports it together with its own GLFW, which is turned off
-	# (the library would otherwise fail to compile on a machine with the Vulkan loader installed)
-	set(CMAKE_DISABLE_FIND_PACKAGE_Vulkan ON)
 
 	add_subdirectory(gvirtual-xray)
 
