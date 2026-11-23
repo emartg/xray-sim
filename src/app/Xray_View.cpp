@@ -123,12 +123,13 @@ void Xray_View::apply_setup(bool should_recreate)
 
 	const auto apply_start = std::chrono::steady_clock::now();
 
-	// the adapter is kept: the library takes the beam and the detector in place. A new one is needed if the last one failed, or if the
-	// number of pixels changed (the renderer sized its images for the old number)
-	const bool can_update = adapter && adapter->get_is_initialised() && !had_error && !should_recreate &&
-		setup.width_in_pixels == image_setup.width_in_pixels && setup.height_in_pixels == image_setup.height_in_pixels;
-	was_updated_in_place = false;
-	update_ms            = 0.0;
+	// the adapter is kept: the library takes the beam and the detector in place, a new number of pixels included (the renderer is
+	// initialised again, faster than a new adapter). A new adapter is needed only if the last one failed
+	const bool can_update = adapter && adapter->get_is_initialised() && !had_error && !should_recreate;
+	const bool is_resize  = setup.width_in_pixels != image_setup.width_in_pixels || setup.height_in_pixels != image_setup.height_in_pixels;
+	was_updated_in_place  = false;
+	was_resized_in_place  = false;
+	update_ms             = 0.0;
 	if (can_update)
 	{
 		adapter->reset_timings(); // the times of this image only
@@ -141,6 +142,7 @@ void Xray_View::apply_setup(bool should_recreate)
 		if (error.empty())
 		{
 			was_updated_in_place = true;
+			was_resized_in_place = is_resize;
 			adapter_reset_ms     = 0.0;
 			adapter_create_ms    = 0.0;
 			scene_ms             = 0.0;
@@ -209,7 +211,7 @@ void Xray_View::apply_setup(bool should_recreate)
 			  << " meshes: total " << apply_ms << " ms; ";
 	if (was_updated_in_place)
 	{
-		std::cout << "the adapter updated in place " << update_ms;
+		std::cout << (was_resized_in_place ? "the adapter updated and resized in place " : "the adapter updated in place ") << update_ms;
 	}
 	else
 	{
@@ -501,24 +503,19 @@ void Xray_View::draw_setup_window()
 		"%.1f",
 		clamp_flag);
 
-	// a new number of pixels needs a new adapter (tens of milliseconds, where the other values are updated in place in a few), so while
-	// the slider of the width or of the height is held, or a value is being typed in it, the new number is shown (and the detector of
-	// the 3D view follows it), and the image is computed again only when the slider is released or the typed value is entered
-	int  width  = static_cast<int>(setup.width_in_pixels);
-	int  height = static_cast<int>(setup.height_in_pixels);
-	bool is_pixel_count_being_edited{ false };
+	// a new number of pixels is applied in place like the other values, so the image follows the slider while it is dragged
+	int width  = static_cast<int>(setup.width_in_pixels);
+	int height = static_cast<int>(setup.height_in_pixels);
 	if (ImGui::SliderInt("Detector width (pixels)", &width, Xray_Setup::MIN_PIXELS, Xray_Setup::MAX_PIXELS, "%d", clamp_flag))
 	{
 		setup.width_in_pixels = static_cast<unsigned int>(width);
 		is_changed            = true;
 	}
-	is_pixel_count_being_edited |= ImGui::IsItemActive();
 	if (ImGui::SliderInt("Detector height (pixels)", &height, Xray_Setup::MIN_PIXELS, Xray_Setup::MAX_PIXELS, "%d", clamp_flag))
 	{
 		setup.height_in_pixels = static_cast<unsigned int>(height);
 		is_changed             = true;
 	}
-	is_pixel_count_being_edited |= ImGui::IsItemActive();
 
 	// the texts wrap at the right edge of the window, whatever its size
 	const float magnification = setup.get_magnification();
@@ -557,7 +554,7 @@ void Xray_View::draw_setup_window()
 
 	if (is_changed)
 		is_setup_dirty = true;
-	if (is_setup_dirty && (is_auto_recompute || is_apply_pressed) && !is_pixel_count_being_edited)
+	if (is_setup_dirty && (is_auto_recompute || is_apply_pressed))
 		apply_setup();
 
 	// the times of the last image, in milliseconds
@@ -568,7 +565,8 @@ void Xray_View::draw_setup_window()
 			"Last image: %.1f ms in all, %u meshes, %s",
 			apply_ms,
 			timings.mesh_count,
-			was_updated_in_place ? "the adapter updated in place" : "a new adapter");
+			was_updated_in_place ? (was_resized_in_place ? "the adapter updated and resized in place" : "the adapter updated in place")
+								 : "a new adapter");
 		if (was_updated_in_place)
 		{
 			ImGui::TextWrapped("Update of the beam and the detector %.1f", update_ms);
@@ -879,7 +877,8 @@ void Xray_View::check_image()
 		return;
 	}
 
-	// another geometry and another detector: the image has the new size, and the shadows are where the new magnification puts them
+	// another geometry and another detector: the adapter is resized in place, the image has the new size, and the shadows are where
+	// the new magnification puts them
 	setup                          = original;
 	setup.source_position          = { 0.0f, 0.0f, -150.0f };
 	setup.source_detector_distance = 250.0f;
@@ -887,6 +886,11 @@ void Xray_View::check_image()
 	setup.width_in_pixels          = 128;
 	setup.height_in_pixels         = 64;
 	apply_setup();
+	if (!was_updated_in_place || !was_resized_in_place)
+	{
+		fail("A new number of pixels did not resize the adapter in place");
+		return;
+	}
 	reason = check_current_image(water, iron);
 	if (reason.empty() && (image.width != 128 || image.height != 64))
 		reason = "The image is " + std::to_string(image.width) + " by " + std::to_string(image.height) + " pixels, not 128 by 64";
@@ -905,10 +909,26 @@ void Xray_View::check_image()
 		fail("With another geometry and detector: " + reason);
 		return;
 	}
+	{ // the image resized in place is the one of a new adapter with the same setup
+		const Xray_Image resized_image = image;
+		apply_setup(true);
+		float resized_difference{ 0.0f };
+		for (std::size_t i = 0; i < image.pixels.size() && i < resized_image.pixels.size(); ++i)
+			resized_difference = std::max(resized_difference, std::abs(resized_image.pixels[i] - image.pixels[i]));
+		std::cout
+			<< "[INFO::XRAY_VIEW::check_image] the image resized in place to 128 by 64 pixels differs from the one of a new adapter by "
+			<< resized_difference << " (the unattenuated beam is " << reference << ")" << std::endl;
+		if (was_updated_in_place || !is_image_valid || resized_image.pixels.size() != image.pixels.size() ||
+			!(resized_difference <= 1.0e-3f * reference))
+		{
+			fail("The image resized in place is not the one of a new adapter");
+			return;
+		}
+	}
 
-	// a free tube: the source beside and above the scene, aimed at its centre, with the detector rolled. It is set in place (the setup
-	// of the start has the number of pixels of the adapter that the last change created), the shadow of each object is where the
-	// projection of the setup puts its centre, and the corners are clear
+	// a free tube: the source beside and above the scene, aimed at its centre, with the detector rolled. It is set in place (from a new
+	// adapter with the setup of the start), the shadow of each object is where the projection of the setup puts its centre, and the
+	// corners are clear
 	setup = original;
 	apply_setup(true);
 	setup.source_position = { 60.0f, 30.0f, -90.0f };

@@ -93,8 +93,8 @@ private:
 	// Private Methods
 	// ---------------
 	// Puts the setup within its limits and computes the image. The adapter is kept between the images, and the beam and the detector
-	// are updated in place; a new adapter, with the meshes of the scene, is created if there is none, if the last one failed, if the
-	// number of pixels changed (the renderer sized its images for it), or if should_recreate is true. Sets the error on failure (and
+	// are updated in place, a new number of pixels included; a new adapter, with the meshes of the scene, is created if there is none,
+	// if the last one failed, or if should_recreate is true. Sets the error on failure (and
 	// clears it first, so that the user can try again). Measures the time of each stage, prints it, and counts the images (see
 	// get_images_in_last_seconds)
 	void apply_setup(bool should_recreate = false);
@@ -162,6 +162,7 @@ private:
 	Xray_Timings timings;
 	double       apply_ms{ 0.0 };               // the whole apply_setup
 	bool         was_updated_in_place{ false }; // true: the last image came from the adapter updated in place, not from a new one
+	bool         was_resized_in_place{ false }; // true: that update in place also changed the number of pixels of the detector
 	double       update_ms{ 0.0 };              // the update of the beam and of the detector in place (0 for a new adapter)
 	double       adapter_reset_ms{ 0.0 };       // the destruction of the old adapter
 	double       adapter_create_ms{ 0.0 };      // the construction of the new adapter (the objects of the library, before initialise)
