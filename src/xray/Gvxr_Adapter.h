@@ -63,8 +63,8 @@ public:
 	// Changes the position of the source, the energy, and the number of photons of the beam
 	std::string update_beam(const Xray_Beam& beam);
 
-	// Changes the position, the up vector, and the pixel size of the detector. The number of pixels cannot change (the renderer
-	// sized its images for it): a new adapter is needed then
+	// Changes the position, the up vector, the pixel size, and the number of pixels of the detector. A new number of pixels
+	// initialises the renderer again in place, and keeps the meshes, their transforms, and their materials
 	std::string update_detector(const Xray_Detector& detector);
 
 	// Sets the transform of a mesh: 16 floats in the column-major order of OpenGL, with the translation in the last column, in

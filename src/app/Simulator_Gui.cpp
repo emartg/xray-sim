@@ -153,9 +153,9 @@ namespace
 		return sum / (static_cast<double>(side) * side);
 	}
 
-	// Checks that what the adapter changes in place gives the image of a new adapter: the material and the transform of a mesh, and the
-	// beam and the detector (with the same number of pixels; another number is refused). Returns an empty string if it does, or the
-	// reason of the failure. No other adapter may be alive: the library keeps one graphics context
+	// Checks that what the adapter changes in place gives the image of a new adapter: the material and the transform of a mesh, the
+	// beam and the detector, and then another number of pixels (wider than high, from a square detector). Returns an empty string if it
+	// does, or the reason of the failure. No other adapter may be alive: the library keeps one graphics context
 	std::string check_in_place_updates(const Xray_Beam& beam, const Xray_Detector& detector)
 	{
 		const Xray_Material aluminium{ "Al", 2.699 };
@@ -172,10 +172,17 @@ namespace
 		changed_detector.position      = { 0.0, 0.0, 600.0 };
 		changed_detector.pixel_size    = 2.5;
 
+		// the new number of pixels: wider and lower than the square detector of the self-test
+		Xray_Detector resized_detector    = changed_detector;
+		resized_detector.width_in_pixels  = detector.width_in_pixels + 64;
+		resized_detector.height_in_pixels = detector.height_in_pixels / 2;
+
 		Xray_Image first;
 		Xray_Image moved;
 		Xray_Image updated;
+		Xray_Image resized;
 		Xray_Image fresh;
+		Xray_Image fresh_resized;
 		{
 			Gvxr_Adapter adapter;
 			std::string  error = adapter.initialise(beam, detector);
@@ -195,13 +202,17 @@ namespace
 				error = adapter.update_detector(changed_detector);
 			if (error.empty())
 				error = adapter.compute_image(updated);
+			if (error.empty())
+				error = adapter.update_detector(resized_detector);
+			if (error.empty())
+				error = adapter.compute_image(resized);
 			if (!error.empty())
 				return "In place: " + error;
 
-			Xray_Detector other_detector   = detector;
-			other_detector.width_in_pixels = 64;
-			if (adapter.update_detector(other_detector).empty())
-				return "A detector with another number of pixels was accepted in place";
+			Xray_Detector empty_detector   = detector;
+			empty_detector.width_in_pixels = 0;
+			if (adapter.update_detector(empty_detector).empty())
+				return "A detector without pixels was accepted in place";
 			if (adapter.set_mesh_transform(1, translation).empty() || adapter.set_mesh_material(1, aluminium).empty())
 				return "A mesh that does not exist was accepted";
 		}
@@ -220,6 +231,20 @@ namespace
 				return "New adapter: " + error;
 		}
 
+		{ // the same, with the new number of pixels from the start
+			Xray_Mesh cube = make_cube("Cube", 100.0f, aluminium);
+			for (std::size_t i = 0; i < cube.positions.size(); i += 3) cube.positions[i] += 30.0f;
+
+			Gvxr_Adapter adapter;
+			std::string  error = adapter.initialise(changed_beam, resized_detector);
+			if (error.empty())
+				error = adapter.add_mesh(cube);
+			if (error.empty())
+				error = adapter.compute_image(fresh_resized);
+			if (!error.empty())
+				return "New adapter with the new number of pixels: " + error;
+		}
+
 		const auto largest_difference = [](const Xray_Image& a, const Xray_Image& b) {
 			float difference{ 0.0f };
 			for (std::size_t i = 0; i < a.pixels.size() && i < b.pixels.size(); ++i)
@@ -228,17 +253,24 @@ namespace
 		};
 		if (first.pixels.size() != moved.pixels.size() || updated.pixels.size() != fresh.pixels.size() || fresh.pixels.empty())
 			return "The images have different sizes";
+		if (resized.width != resized_detector.width_in_pixels || resized.height != resized_detector.height_in_pixels ||
+			fresh_resized.width != resized.width || fresh_resized.height != resized.height)
+			return "The image of the new number of pixels has the wrong size";
 
 		const float beam_value       = *std::max_element(fresh.pixels.begin(), fresh.pixels.end());
 		const float first_beam_value = *std::max_element(first.pixels.begin(), first.pixels.end());
 		std::cout << "[INFO::SIMULATOR_GUI::run_xray_self_test] the changes in place differ from a new adapter by "
 				  << largest_difference(updated, fresh) << " (the unattenuated beam is " << beam_value
 				  << "), and the change of the material and of the transform changes the first image by "
-				  << largest_difference(first, moved) << " (the unattenuated beam was " << first_beam_value << ")" << std::endl;
+				  << largest_difference(first, moved) << " (the unattenuated beam was " << first_beam_value
+				  << "), and the image resized in place to " << resized.width << " by " << resized.height
+				  << " pixels differs from a new adapter by " << largest_difference(resized, fresh_resized) << std::endl;
 		if (!(largest_difference(first, moved) > 0.05f * first_beam_value))
 			return "The change of the material and of the transform did not change the image";
 		if (!(largest_difference(updated, fresh) <= 1.0e-3f * beam_value))
 			return "The image updated in place is not the one of a new adapter";
+		if (!(largest_difference(resized, fresh_resized) <= 1.0e-3f * beam_value))
+			return "The image resized in place is not the one of a new adapter";
 
 		return "";
 	}

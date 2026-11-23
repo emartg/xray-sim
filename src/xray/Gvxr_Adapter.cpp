@@ -460,13 +460,9 @@ std::string Gvxr_Adapter::update_detector(const Xray_Detector& detector)
 	{
 		return "The adapter is not initialised";
 	}
-	if (detector.width_in_pixels != implementation->width || detector.height_in_pixels != implementation->height)
+	if (detector.width_in_pixels == 0 || detector.height_in_pixels == 0 || !(detector.pixel_size > 0.0))
 	{
-		return "The number of pixels of the detector changed: the renderer sized its images for the old one, so a new adapter is needed";
-	}
-	if (!(detector.pixel_size > 0.0))
-	{
-		return "A pixel of the detector has no size";
+		return "The detector has no pixels, or a pixel has no size";
 	}
 
 	const Scoped_Timer update_timer{ implementation->timings.update_ms };
@@ -476,6 +472,21 @@ std::string Gvxr_Adapter::update_detector(const Xray_Detector& detector)
 		implementation->detector.setUpVector(to_vector(detector.up_vector).normal());
 		implementation->detector.setResolutionInUnitsOfLengthPerPixel(
 			gVirtualXRay::VEC2{ to_number(detector.pixel_size), to_number(detector.pixel_size) });
+
+		// a new number of pixels: the renderer sizes its images again with a second initialise, which keeps the meshes (their
+		// transforms and materials), the beam, the detector, and the filtering options (gVirtualXRay's TestDetectorResize). Only an
+		// outer surface would have to be added again, and the adapter has none
+		if (detector.width_in_pixels != implementation->width || detector.height_in_pixels != implementation->height)
+		{
+			implementation->detector.setNumberOfPixels(gVirtualXRay::Vec2ui{ detector.width_in_pixels, detector.height_in_pixels });
+
+			Gl_State_Guard guard{ implementation->timings.guard_ms }; // the renderer creates its framebuffers and textures again
+			implementation->renderer
+				.initialise(gVirtualXRay::XRayRenderer::OPENGL, FULL_PRECISION_FLAG, &implementation->detector, &implementation->beam);
+			implementation->renderer.needUpdateSurfacePerMaterial();
+			implementation->width  = detector.width_in_pixels;
+			implementation->height = detector.height_in_pixels;
+		}
 	}
 	catch (...)
 	{
