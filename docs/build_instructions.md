@@ -35,7 +35,7 @@ The repository records one commit for each submodule (the pin), but the build us
 
 To configure anyway, for example to try another version without recording it, add `-DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON` (off by default): the stop becomes a warning with the same message. The check compares commits, not the files, so a folder with uncommitted work at the recorded commit passes. It is skipped, with a status message, when it cannot be made: Git is not available, the sources are not a Git checkout (for example, a source archive), a submodule was not fetched, or the repository records no commit for it.
 
-If a submodule folder is also used to work on that submodule, put it at the recorded commit before building the simulator (`git -C engine status --short` must print nothing first, and then `git -C engine switch --detach <commit>`), and go back to the work afterwards.
+Keep `engine/` and `gvirtual-xray/` at the recorded commits: to work on the Engine or on gVirtualXRay, use a separate clone of its repository, not these folders, so that a build of the simulator never meets another commit. `git submodule status` shows a `+` at the start of the line of a folder that is at another commit (see Troubleshooting for the commands that put it back).
 
 ## Dependencies
 
@@ -55,13 +55,36 @@ The dependencies of the engine can change when the pinned version of the engine 
 
 ## Building and Running
 
-Use one of the presets of `CMakePresets.json`. The names are the same as the engine's: `ninja-msvc-debug`, `ninja-msvc-release`, `vs2022-msvc-*`, `vs2026-msvc-*`, `mingw-gcc-vcpkg-*` (Windows), and `ninja-gcc-*`, `ninja-clang-*` (Linux). The Ninja presets with MSVC must run in an x64 Visual Studio Developer PowerShell (see the engine's instructions).
+Use one of the presets of `CMakePresets.json`. The names are the same as the engine's: `ninja-msvc-debug`, `ninja-msvc-release`, `vs2022-msvc-*`, `vs2026-msvc-*`, `mingw-gcc-vcpkg-*` (Windows), and `ninja-gcc-*`, `ninja-clang-*` (Linux). Each group of presets needs its own environment, so use a new PowerShell for each group (an environment that one group leaves, such as MinGW first on the `PATH` or the variables of the developer shell, spoils the next).
+
+The Ninja presets with MSVC need an x64 Visual Studio developer environment, in which `cl` is found. A plain PowerShell does not have it, and VS Code's CMake panel and integrated terminal may not have it either (they did not in our checks): configure these presets from a PowerShell in which you entered the developer environment, or use a Visual Studio preset, which finds its compiler without it. Entering the developer environment points `VCPKG_ROOT` to the vcpkg of Visual Studio, so put your own back (see Troubleshooting):
 
 ```powershell
-# Windows (Ninja and MSVC, in an x64 developer environment)
+# Windows (Ninja and MSVC): enter the x64 developer environment, then configure, build, and run
+$vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
+$env:VCPKG_ROOT = [Environment]::GetEnvironmentVariable("VCPKG_ROOT", "User")
+if (-not (Get-Command cl -ErrorAction SilentlyContinue)) { throw "cl not found: the developer environment did not load" }
 cmake --preset ninja-msvc-debug
 cmake --build --preset ninja-msvc-debug
 .\out\build\ninja-msvc-debug\bin\XRSim.exe
+```
+
+```powershell
+# Windows (Visual Studio 2026 generator): no developer environment needed; the executable is in a folder of the configuration
+cmake --preset vs2026-msvc-debug
+cmake --build --preset vs2026-msvc-debug
+.\out\build\vs2026-msvc-debug\bin\Debug\XRSim.exe
+```
+
+```powershell
+# Windows (MinGW): its bin folder first on the PATH (for the compiler and, at run time, its runtime libraries), and CMake by its
+# full path, because MinGW ships a cmake.exe of its own (see Troubleshooting); the folder of MinGW is the one of your installation
+$env:PATH = "C:\path\to\mingw64\bin;$env:PATH"
+& "C:\Program Files\CMake\bin\cmake.exe" --preset mingw-gcc-vcpkg-debug
+& "C:\Program Files\CMake\bin\cmake.exe" --build --preset mingw-gcc-vcpkg-debug
+.\out\build\mingw-gcc-vcpkg-debug\bin\XRSim.exe
 ```
 
 ```
@@ -75,7 +98,7 @@ The build presets build every target (the application, the libraries, and the te
 
 ## Tests
 
-The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). The first three are labelled `smoke`:
+The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). The first four are labelled `smoke`:
 
 - `XRSim_Smoke_Test` renders 60 frames, and fails if the exit code is not zero or if a line contains `[ERROR`. It needs an OpenGL 4.5 display (on Linux without one, run it with `xvfb-run -a`, which needs the `xvfb` and `libgl1-mesa-dri` packages).
 - `XRSim_Invalid_Argument_Test` checks that an invalid argument is rejected. It needs no display.
@@ -89,10 +112,25 @@ The tests are built with `-DXRSIM_BUILD_TESTS=ON` (off by default). The first th
 - `Gvxr_Adapter_Test` (label `unit`, only with the X-ray part) checks that the simulator can use gVirtualXRay: the version is reported and the library creates a mixture of chemical elements, without an OpenGL context.
 
 ```
+# Linux (the smoke tests need a display: on a machine without one, run ctest under xvfb-run -a)
 cmake --preset ninja-gcc-debug -DXRSIM_BUILD_TESTS=ON
 cmake --build --preset ninja-gcc-debug
-ctest --test-dir out/build/ninja-gcc-debug --output-on-failure
+ctest --test-dir out/build/ninja-gcc-debug --output-on-failure --no-tests=error
 ```
+
+```powershell
+# Windows, Ninja and MSVC (in the developer environment, see Building and Running), and MinGW in the same way, with its environment
+cmake --preset ninja-msvc-debug -DXRSIM_BUILD_TESTS=ON
+cmake --build --preset ninja-msvc-debug
+ctest --test-dir out/build/ninja-msvc-debug --output-on-failure --no-tests=error
+
+# Windows, Visual Studio generator: ctest needs the configuration (-C Debug or -C Release)
+cmake --preset vs2026-msvc-debug -DXRSIM_BUILD_TESTS=ON
+cmake --build --preset vs2026-msvc-debug
+ctest --test-dir out/build/vs2026-msvc-debug -C Debug --output-on-failure --no-tests=error
+```
+
+`--no-tests=error` makes `ctest` fail when it finds no test (a build folder configured without `-DXRSIM_BUILD_TESTS=ON`) instead of passing. The smoke tests open the window of the simulator for a few frames: do not type while they run, because a key that reaches it can make one fail (see Troubleshooting).
 
 ## Code Formatting
 
@@ -107,6 +145,7 @@ git ls-files '*.c' '*.cpp' '*.h' '*.hpp' | xargs clang-format --style=file --dry
 The workflow `.github/workflows/ci.yml` runs on every push to `main` and on every pull request:
 
 - **Format:** the clang-format check above.
+- **Submodules:** every build job checks out the Engine and gVirtualXRay at the recorded commits; that step stops after 10 minutes, so a clone that hangs on the network fails the job soon, and "Re-run failed jobs" runs it again.
 - **Linux:** the `ninja-gcc-debug` and `ninja-clang-release` presets, with the system packages; it builds and runs the tests under a virtual display (Xvfb) with Mesa's software OpenGL 4.5 renderer.
 - **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache, with the triplets `x64-windows-ci` and `x64-mingw-dynamic-ci` of `cmake/vcpkg_triplets`, which leave the compiler out of the ABI hash of the packages so that a new build of the compiler in the runner image does not discard the cache; `x64-windows-ci` is also the host triplet, so it does the same for the tools that vcpkg builds for itself; a compiler upgrade does not rebuild a package in the CI, because the key of the cache has the versions of the compiler, of CMake, and of PowerShell (the hash of every package has them); the summary of each job shows how many packages vcpkg restored and the entries of the hash of `zlib` and `vcpkg-cmake`: if the cache does not restore, the entry that differs between two runs is the cause); it builds and runs only the tests that need no display (the invalid argument test, the unit tests of the scene, the setup, the display, and the pin guard, and the adapter test, because the X-ray part is built in every job), since the runners do not support OpenGL 4.5.
 
@@ -114,7 +153,7 @@ The workflow `.github/workflows/ci.yml` runs on every push to `main` and on ever
 
 ### The pin guard stops the configuration
 
-CMake stops with `The folder 'engine' is not at the commit that this repository records for it` (or `'gvirtual-xray'`). The folder is checked out at another commit than the one that the repository records, most often because it is on its own `main` while you work on it, and the build uses the contents of the folder, not the recorded commit. The message is expected in that case. From the root of the repository, in PowerShell, put the folders at the recorded commits (taken from Git, not from a hash written in a text), delete the build folder, and configure again:
+CMake stops with `The folder 'engine' is not at the commit that this repository records for it` (or `'gvirtual-xray'`). The folder is checked out at another commit than the one that the repository records (for example after a `git switch` or a `git pull` inside it), and the build uses the contents of the folder, not the recorded commit. From the root of the repository, in PowerShell, put the folders at the recorded commits (taken from Git, not from a hash written in a text), delete the build folder, and configure again:
 
 ```powershell
 git -C engine status --short
@@ -124,14 +163,7 @@ git -C gvirtual-xray switch --detach (git rev-parse :gvirtual-xray)
 git submodule status
 ```
 
-The first two commands must print nothing (otherwise commit or stash the work in that folder first: Git refuses to switch over it), and `git submodule status` must show no `+` at the start of a line. Build, test, and run while the folders are detached: the program reads the shaders and the resources of the Engine from `engine/` every time it runs, so an Engine at another commit crashes it at start-up. Afterwards put the folders back on their branches:
-
-```powershell
-git -C engine switch main
-git -C engine pull
-git -C gvirtual-xray switch main
-git -C gvirtual-xray pull
-```
+The first two commands must print nothing (otherwise commit the work in that folder first, or better, move it to a separate clone: Git refuses to switch over it), and `git submodule status` must show no `+` at the start of a line. Leave the folders there: the program reads the shaders and the resources of the Engine from `engine/` every time it runs, so an Engine at another commit crashes it at start-up. (The message of the pin guard also says how to put a folder back on a branch; with the folders kept at the recorded commits, that is not needed.)
 
 `-DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON` turns the stop into a warning, but then what is built is not the version that the repository says it builds (an Engine that is ahead of the pinned release also needs `nlohmann_json`, which `vcpkg.json` does not list), so use it only to try another version on purpose.
 
@@ -141,27 +173,76 @@ The first configuration of each preset builds the dependencies with vcpkg (10 to
 
 ### vcpkg waits for a filesystem lock, or the installed folder is inconsistent
 
-Two vcpkg runs on the same vcpkg folder (two terminals, or VS Code and a terminal) wait for each other's lock (`buildtrees\vcpkg-running.lock` in `VCPKG_ROOT`): wait for the first one, or stop it. A run that was interrupted can leave the installed folder of the build inconsistent (packages missing or half installed): delete `out\build\<preset>\vcpkg_installed` and configure again; the packages come back from the binary cache.
+Two vcpkg runs on the same vcpkg folder (two terminals, or VS Code and a terminal) wait for each other's lock (`buildtrees\vcpkg-running.lock` in `VCPKG_ROOT`), and the second prints `waiting to take filesystem lock` until the first finishes: wait for it, or stop the other run (Ctrl+C in its terminal) if it is not needed. Never delete the lock file while a vcpkg runs. To see which runs are there:
 
-### A build folder holds the tools of another compiler
+```powershell
+Get-CimInstance Win32_Process | Where-Object Name -match 'vcpkg|cmake' | Select-Object ProcessId, Name, CommandLine | Format-List
+```
 
-A build folder that was configured with one compiler and is configured again with another keeps the tools in its `CMakeCache.txt`: for example MinGW's `ld.exe` and `ar.exe` under MSVC, which fails with `unrecognised emulation mode`. Delete `CMakeCache.txt` and the folder `CMakeFiles` of that build folder (or the whole folder) and configure again, or add `--fresh` to the configuration command.
+A run that was interrupted can leave the installed folder of the build inconsistent (packages missing or half installed): delete `out\build\<preset>\vcpkg_installed` and configure again; the packages come back from the binary cache.
+
+### A build folder holds the tools of another compiler, or was configured in the wrong environment
+
+A build folder keeps the tools that its first configuration found in its `CMakeCache.txt`. A folder that was configured with one compiler and then with another, or a `ninja-msvc-*` folder that was first configured without the developer environment (CMake then finds MinGW's `ld.exe` and `ar.exe` on the `PATH`), fails later with `unrecognised emulation mode` or with `cl ... no such file or directory`. To check, look at the tools of the folder (a linker or an archiver of MinGW in an MSVC folder is the cause):
+
+```powershell
+Select-String -Path out\build\ninja-msvc-debug\CMakeCache.txt -Pattern '^CMAKE_LINKER|^CMAKE_AR|^CMAKE_CXX_COMPILER:'
+```
+
+Delete the whole build folder (`Remove-Item -Recurse -Force out\build\ninja-msvc-debug`) or add `--fresh` to the configuration command, and configure again in the right environment.
+
+### VS Code and a terminal configure the same build folder
+
+A configuration in the terminal starts over from an empty cache, or the next one of VS Code does: VS Code's CMake Tools passes the compiler by its full path, a terminal passes `cl`, and CMake sees another compiler and clears the cache, in the environment of whichever configured last. Use one of them per build folder at a time; for a terminal experiment, use a separate folder, for example `cmake --preset ninja-msvc-debug -B out/build/terminal-msvc-debug`.
 
 ### `cl` is not found
 
-The Ninja presets with MSVC (`ninja-msvc-debug`, `ninja-msvc-release`) need a Visual Studio developer shell: `cl` is not in the `PATH` of a plain PowerShell. The Visual Studio presets (`vs2022-msvc-debug`, `vs2026-msvc-debug`) do not need it. From any PowerShell, enter an x64 developer shell, restore `VCPKG_ROOT` (see the next entry), and check the compiler before configuring:
+The configuration of a Ninja preset with MSVC (`ninja-msvc-debug`, `ninja-msvc-release`) stops with `The CMAKE_C_COMPILER: cl is not a full path and was not found in the PATH`: it needs a Visual Studio developer environment, and `cl` is not in the `PATH` of a plain PowerShell, and may not be in the one of VS Code's CMake panel or integrated terminal either. The Visual Studio presets (`vs2022-msvc-*`, `vs2026-msvc-*`) do not need it. Delete the build folder that the failed configuration left (see the entry above), then, from a PowerShell, enter an x64 developer environment, restore `VCPKG_ROOT` (see the next entry), and stop if `cl` is still not found:
 
 ```powershell
 $vsPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
 Import-Module "$vsPath\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
 Enter-VsDevShell -VsInstallPath $vsPath -SkipAutomaticLocation -DevCmdArguments "-arch=x64 -host_arch=x64"
 $env:VCPKG_ROOT = [Environment]::GetEnvironmentVariable("VCPKG_ROOT", "User")
-Get-Command cl
+if (-not (Get-Command cl -ErrorAction SilentlyContinue)) { throw "cl not found: the developer environment did not load" }
 ```
 
 ### `VCPKG_ROOT` points to Visual Studio's own vcpkg
 
 The Visual Studio developer shell sets `VCPKG_ROOT` to the vcpkg that comes with Visual Studio, which failed to build the packages of this repository. Use your own clone of vcpkg (one that contains the `builtin-baseline` commit of `vcpkg.json`): set `VCPKG_ROOT` as a user environment variable, and in a developer shell restore it after entering the shell (`$env:VCPKG_ROOT = [Environment]::GetEnvironmentVariable("VCPKG_ROOT", "User")`). Check it with `$env:VCPKG_ROOT` before configuring.
+
+### A download fails with a certificate error (MinGW on the `PATH`)
+
+A new build folder stops while CMake downloads a dependency, with `status 60` and `no trust anchors configured` or a TLS error, while older folders still work. MinGW ships its own `cmake.exe`, built without certificates, and with MinGW's `bin` folder first on the `PATH` a bare `cmake` is that one. Check which one it is (it should be the one of CMake, `C:\Program Files\CMake\bin\cmake.exe`), delete the build folder that failed, and call CMake and CTest by their full path:
+
+```powershell
+(Get-Command cmake).Source
+& "C:\Program Files\CMake\bin\cmake.exe" --preset mingw-gcc-vcpkg-debug
+```
+
+### A program or a test of a MinGW build stops at once with the exit code `0xc0000135`
+
+A DLL is not found, usually the runtime of MinGW (`libstdc++-6.dll` and the others of its `bin` folder). Run the program and `ctest` with MinGW's `bin` folder on the `PATH`, as for the build (see Building and Running).
+
+### `ctest` says `No tests were found` and passes
+
+The tests were not built: the build folder was configured without `-DXRSIM_BUILD_TESTS=ON`. `ctest` returns 0 when it finds no test, so a script goes on; with `--no-tests=error` it fails instead. Configure again with the option, build, and run `ctest` again.
+
+### A smoke test fails with `Unknown key input`
+
+A key (Shift, Alt, Ctrl, or a letter) reached the window of a smoke test while it ran: the pinned Engine (v0.9.0) reports the keys that it does not know as errors (`[ERROR::INPUTMANAGER::key_callback] Unknown key input`), and the smoke tests fail on any `[ERROR` line. Do not type while they run, and run the failed tests again:
+
+```powershell
+ctest --test-dir out/build/ninja-msvc-debug --rerun-failed --output-on-failure
+```
+
+### A Debug build aborts when its window is minimized
+
+The pinned Engine (v0.9.0) builds the projection of its camera from the size of the framebuffer, which is 0 by 0 while the window is minimized; in a Debug build the assertion of `glm::perspective` fails (`abs(aspect - std::numeric_limits<T>::epsilon()) > static_cast<T>(0)`), and the program ends. A Release build goes on. A later version of the Engine skips the frames of a minimized window; until the simulator moves to it, do not minimize a Debug build.
+
+### vcpkg stops: a download `had an unexpected hash`
+
+The configuration stops while vcpkg builds a package, with `download from ... had an unexpected hash` and the expected and the actual SHA512: the archive that the port downloads changed on its host, so the hash that the port records at the `builtin-baseline` of `vcpkg.json` no longer matches (a warm binary cache hides it until the package is built again). It is fixed in the repository, by moving the baseline to the vcpkg commit that fixes the port; until then, an older build folder or the binary cache still has the package. Your vcpkg clone must contain the baseline that `vcpkg.json` names (`git -C $env:VCPKG_ROOT pull`).
 
 ### The configuration of gVirtualXRay stops at `BinaryLibFiles` with `The system cannot find the path specified`
 
