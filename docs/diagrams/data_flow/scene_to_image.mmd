@@ -1,0 +1,45 @@
+---
+config:
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+  flowchart:
+    curve: linear
+---
+%% The data of the simulator and their units, from the scene and the X-ray setup (centimetres, degrees, keV) to the two views: the Engine's
+%% 3D view (one unit of the Engine is 10 cm, Scene_Builder::VIEW_UNITS_PER_CENTIMETRE) and the X-ray image (gVirtualXRay works in
+%% millimetres). Each arrow names the function that converts, as written in src/.
+flowchart TB
+    Scene["<b>Scene</b><br/>objects: shape, position,<br/>rotation, scale, material<br/><i>cm, degrees</i>"]
+    Setup["<b>Xray_Setup</b><br/>source, yaw, pitch, roll,<br/>distance, pixels, energy<br/><i>cm, degrees, keV</i>"]
+    Nodes["<b>Engine nodes</b><br/>the objects<br/><i>dm</i>"]
+    TubeNodes["<b>Engine nodes</b><br/>tube, plate, beam<br/><i>dm</i>"]
+    View3D["<b>3D view</b><br/>drawn by the Engine"]
+    Meshes["<b>Xray_Mesh</b> and transforms<br/><i>mm</i>, compound, density"]
+    BeamDetector["<b>Xray_Beam</b>, <b>Xray_Detector</b><br/><i>mm, keV</i>"]
+    Adapter["<b>Gvxr_Adapter</b><br/>gVirtualXRay on the<br/>Engine's OpenGL context"]
+    Image["<b>Xray_Image</b><br/>energy per pixel"]
+    Grey["<b>grey values</b><br/>0 to 255"]
+    Texture["<b>OpenGL texture</b><br/>X-ray window,<br/>or the single view"]
+
+    Scene -- "Scene_Builder::build, Scene_Sync<br/>(x 0.1)" --> Nodes
+    Setup -- "Tube_Display::update<br/>(x 0.1)" --> TubeNodes
+    Nodes --> View3D
+    TubeNodes --> View3D
+    Scene -- "make_xray_local_meshes,<br/>get_xray_transform (x 10)" --> Meshes
+    Setup -- "make_beam, make_detector<br/>(x 10)" --> BeamDetector
+    Meshes -- "add_mesh, set_mesh_transform" --> Adapter
+    BeamDetector -- "initialise, update_beam,<br/>update_detector" --> Adapter
+    Adapter -- "compute_image" --> Image
+    Image -- "mirror, find_reference_value,<br/>Xray_Display::convert_to_grey" --> Grey
+    Grey -- "upload, drawn with<br/>get_texture_corners" --> Texture
+
+    classDef data fill:#d9eaf7,stroke:#1f4e79,stroke-width:2px,color:#111
+    classDef engine fill:#ede7f6,stroke:#5e35b1,stroke-width:2px,color:#111
+    classDef xray fill:#e8f4e8,stroke:#388e3c,stroke-width:2px,color:#111
+    class Scene,Setup data
+    class Nodes,TubeNodes,View3D engine
+    class Meshes,BeamDetector,Adapter,Image,Grey,Texture xray
