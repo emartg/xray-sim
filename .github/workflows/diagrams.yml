@@ -1,0 +1,32 @@
+# Light check of the diagrams: every rendered image in docs/diagrams/ has its Mermaid source (or is listed in
+# pending_sources.txt) and the reverse. It renders nothing and takes a few seconds. It is a workflow of its own, and
+# not a job of ci.yml, so that a change of the diagrams does not start the builds, and it has its own status check. It is the
+# workflow of the Engine (opengl-graphics-engine), copied unchanged except for this sentence.
+
+name: Diagrams
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel the previous runs of the same branch or pull request when a new commit is pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pairs:
+    name: Diagrams (each .png has its .mmd)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Check the pairs of sources and images
+        run: python3 docs/diagrams/diagrams.py check
