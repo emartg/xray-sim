@@ -1,0 +1,142 @@
+---
+config:
+  layout: elk
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+  class:
+    useMaxWidth: false
+---
+%% Module: scene (src/scene, the library XRSim_Scene, no OpenGL). Details the block XRSim_Scene of architecture_overview: the scene and its
+%% objects in centimetres, their shapes and materials, the X-ray setup, and the camera of the 3D view. The types of the X-ray library's
+%% interface (src/xray/Xray_Types.h) are reference blocks; the limits of each value are one line (MIN_ and MAX_ pairs).
+classDiagram
+    direction LR
+    class Scene {
+        <<scene>>
+        +MILLIMETRES_PER_UNIT : float = 10$
+        +MIN_/MAX_POSITION, ROTATION, SCALE$
+        -objects : vector~Scene_Object~
+        -revision : uint64_t
+        +make_default_scene()$ Scene
+        +add_object(object)
+        +set_object_material(index, material) bool
+        +set_object_position(index, position) bool
+        +set_object_rotation(index, rotation) bool
+        +set_object_scale(index, scale) bool
+        +remove_object(index) bool
+        +make_xray_local_meshes() vector~Xray_Mesh~
+        +get_xray_transform(index) array~float, 16~
+        +find_object_around_point(point) pointer to Scene_Object
+        +find_object_hit_by_ray(...) optional~size_t~
+        +find_object_touching_rectangle(...) pointer to Scene_Object
+        +get_revision() uint64_t
+    }
+    class Scene_Object {
+        <<scene>>
+        +name : string
+        +type : Shape_Type
+        +shape : Shape_Data
+        +position, rotation, scale : array~float, 3~
+        +material_index : size_t
+    }
+    class Shape_Type {
+        <<enumeration>>
+        CUBE
+        SPHERE
+        CYLINDER
+    }
+    class Shape_Data {
+        <<scene>>
+        +FLOATS_PER_VERTEX : unsigned = 8$
+        +vertices : vector~float~
+        +indices : vector~uint32_t~
+        +get_vertex_count() size_t
+    }
+    class Shape_Factory {
+        <<scene>>
+        +make_cube(side)$ Shape_Data
+        +make_sphere(radius, ...)$ Shape_Data
+        +make_cylinder(radius, height, ...)$ Shape_Data
+        +make_pyramid()$ Shape_Data
+        +compute_signed_volume(...)$ double
+    }
+    class Scene_Material_Table {
+        <<scene>>
+        +get_materials()$ vector~Scene_Material~
+        +find(name)$ size_t
+    }
+    class Scene_Material {
+        <<scene>>
+        +name : string
+        +albedo : array~float, 4~
+        +xray : Xray_Material
+    }
+    class Xray_Setup {
+        <<scene>>
+        +MIN_/MAX_ of each value$
+        +energy : float
+        +source_position : array~float, 3~
+        +yaw, pitch, roll : float
+        +source_detector_distance : float
+        +pixel_size : float
+        +width_in_pixels, height_in_pixels : unsigned
+        +clamp()
+        +aim_at(point)
+        +get_direction() array~float, 3~
+        +get_detector_position(), get_detector_up()
+        +get_detector_right()
+        +get_detector_size(), get_detector_corners()
+        +project(point, x, y) bool
+        +get_magnification_at(point) float
+        +make_beam() Xray_Beam
+        +make_detector() Xray_Detector
+    }
+    class Orbit_Camera {
+        <<scene>>
+        +ORBIT_DEGREES_PER_PIXEL$
+        +DOLLY_FACTOR_PER_NOTCH$
+        +MIN_/MAX_PITCH, DISTANCE$
+        +position : array~float, 3~
+        +yaw, pitch : float
+        +get_front(), get_right(), get_up()
+        +get_ray_direction(...)
+        +get_depth_of(point) float
+        +orbit(pivot, delta_x, delta_y)
+        +pan(pivot, ...)
+        +dolly(pivot, notches)
+    }
+    class Xray_Mesh {
+        <<xray type>>
+        +name, positions, indices, material
+    }
+    class Xray_Material {
+        <<xray type>>
+        +compound : string
+        +density : double
+    }
+    class Xray_Beam {
+        <<xray type>>
+        +source_position, energy, photons_per_pixel
+    }
+    class Xray_Detector {
+        <<xray type>>
+        +position, up_vector, pixel_size
+        +width_in_pixels, height_in_pixels
+    }
+
+    Scene *-- Scene_Object : objects
+    Scene_Object --> Shape_Type : type
+    Scene_Object *-- Shape_Data : shape
+    Scene_Object ..> Scene_Material : material_index
+    Scene ..> Shape_Factory : default scene
+    Shape_Factory ..> Shape_Data : makes
+    Scene ..> Scene_Material_Table : materials
+    Scene_Material_Table *-- Scene_Material : table
+    Scene_Material *-- Xray_Material : xray
+    Scene ..> Xray_Mesh : makes
+    Xray_Setup ..> Xray_Beam : makes
+    Xray_Setup ..> Xray_Detector : makes

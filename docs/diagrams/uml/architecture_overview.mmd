@@ -1,0 +1,103 @@
+---
+config:
+  layout: elk
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+  class:
+    useMaxWidth: false
+---
+%% The top of the UML set: the modules of the simulator (app, scene, display, xray) and the two packages that it uses (the Engine and gVirtualXRay).
+%% Detailed by app_module (main, Simulator_Gui, Xray_View), scene_views (Scene views), scene_module (XRSim_Scene), display_module
+%% (XRSim_Display), and xray_module (Gvxr_Adapter and Xray_Types). The Engine and gVirtualXRay show only the classes that the simulator uses.
+classDiagram
+    direction TB
+    class main {
+        <<app functions>>
+        +main(argc, argv) int
+        +parse_command_line(...) bool
+    }
+    class Simulator_Gui {
+        <<app>>
+        +draw()
+        +set_node_ids(node_ids)
+    }
+    class Scene_Views["Scene views"] {
+        <<app>>
+        Scene_Builder
+        Scene_Sync
+        Tube_Display
+    }
+    class Xray_View {
+        <<app>>
+        +draw()
+        +update_scene()
+        +get_setup() Xray_Setup
+        +get_tube_style() Tube_Display_Style
+    }
+    class XRSim_Scene {
+        <<scene library>>
+        Scene, Scene_Object
+        Scene_Material_Table
+        Shape_Factory, Shape_Data
+        Xray_Setup
+        Orbit_Camera
+    }
+    class XRSim_Display {
+        <<display library>>
+        Xray_Display
+        Xray_Display_Settings
+    }
+    class Gvxr_Adapter {
+        <<xray library>>
+        +initialise(beam, detector) string
+        +add_mesh(mesh) string
+        +update_beam(beam) string
+        +update_detector(detector) string
+        +set_mesh_transform(index, matrix) string
+        +set_mesh_material(index, material) string
+        +compute_image(image) string
+    }
+    class Xray_Types {
+        <<xray header>>
+        Xray_Material, Xray_Mesh
+        Xray_Beam, Xray_Detector
+        Xray_Image, Xray_Timings
+    }
+    class Gui_Layer {
+        <<Engine interface>>
+        +draw()
+    }
+    class Engine {
+        <<Engine>>
+        Core, GLFW_Renderer
+        Node_Manager, Selection_Manager
+        Camera, Shape_Model
+    }
+    class gVirtualXRay {
+        <<gVXR>>
+        Context, XRayRenderer
+        XRayBeam, XRayDetector
+        PolygonMesh, SceneGraphNode
+    }
+
+    main ..> Engine : creates Core and GLFW_Renderer
+    main ..> Simulator_Gui : creates
+    Simulator_Gui ..|> Gui_Layer : realizes
+    Engine o-- Gui_Layer : draws each frame
+    Simulator_Gui *-- Scene_Views : owns Scene_Sync, Tube_Display
+    Simulator_Gui *-- Xray_View : owns
+    Simulator_Gui o-- XRSim_Scene : shares the Scene
+    Simulator_Gui ..> Engine : camera, selection
+    Scene_Views ..> Engine : nodes
+    Scene_Views ..> XRSim_Scene : reads
+    Xray_View ..> XRSim_Scene : setup, meshes
+    Xray_View ..> XRSim_Display : grey image
+    Xray_View *-- Gvxr_Adapter : owns
+    Gvxr_Adapter ..> Xray_Types : plain types
+    XRSim_Scene ..> Xray_Types : makes
+    XRSim_Display ..> Xray_Types : reads Xray_Image
+    Gvxr_Adapter ..> gVirtualXRay : wraps, privately
