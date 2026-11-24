@@ -1,0 +1,46 @@
+---
+config:
+  layout: elk
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+  class:
+    useMaxWidth: false
+---
+%% Module: display (src/display, the library XRSim_Display, no OpenGL). Details the block XRSim_Display of architecture_overview: the
+%% conversion of an X-ray image (the energy of each pixel) to grey values, relative to the unattenuated beam. Xray_Display is a namespace
+%% of free functions; Xray_Image is a reference block (src/xray/Xray_Types.h).
+classDiagram
+    direction LR
+    class Xray_Display {
+        <<display functions>>
+        +DECADES : float = 2$
+        +find_reference_value(image)$ float
+        +get_transmission(value, reference)$ float
+        +get_grey_value(transmission, settings)$ uint8_t
+        +convert_to_grey(image, reference, settings)$ vector~uint8_t~
+        +get_texture_corners(settings)$ array~float, 4~
+    }
+    class Xray_Display_Settings {
+        <<display>>
+        +mode : Xray_Display_Mode
+        +is_negative : bool
+        +is_seen_from_source : bool
+    }
+    class Xray_Display_Mode {
+        <<enumeration>>
+        LINEAR
+        LOGARITHMIC
+    }
+    class Xray_Image {
+        <<xray type>>
+        +width, height : unsigned
+        +pixels : vector~float~
+    }
+
+    Xray_Display ..> Xray_Display_Settings : reads
+    Xray_Display_Settings --> Xray_Display_Mode : mode
+    Xray_Display ..> Xray_Image : converts

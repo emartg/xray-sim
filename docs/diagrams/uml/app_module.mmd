@@ -1,0 +1,109 @@
+---
+config:
+  layout: elk
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+  class:
+    useMaxWidth: false
+---
+%% Module: app (src/app, the executable XRSim). Details the blocks main, Simulator_Gui, and Xray_View of architecture_overview; its block
+%% "Scene views" is detailed by scene_views. The classes of the Engine and of the other modules are reference blocks with only the members
+%% that this module uses. The six test runners of Simulator_Gui are one line, and so are the timers of Xray_View.
+classDiagram
+    direction TB
+    class main {
+        <<app functions>>
+        +main(argc, argv) int
+        +parse_command_line(...) bool
+    }
+    class Simulator_Gui {
+        <<app>>
+        -scene : shared_ptr~Scene~
+        -camera_pivot, is_orbiting, is_panning
+        -last_click : array~float, 2~
+        +draw()
+        +set_node_ids(node_ids)
+        -update_camera()
+        -move_camera(orbit_x, orbit_y, pan_x, pan_y, wheel)
+        -draw_scene_window()
+        -resolve_pick_through_volume()
+        -run_*_test()
+    }
+    class Xray_View {
+        <<app>>
+        -setup, image_setup : Xray_Setup
+        -tube_style : Tube_Display_Style
+        -image : Xray_Image
+        -display_settings : Xray_Display_Settings
+        -is_single_view, is_tube_shown : bool
+        -timings and stage times
+        +draw()
+        +update_scene()
+        +get_setup() Xray_Setup
+        +get_tube_style() Tube_Display_Style
+        -apply_setup(should_recreate)
+        -compute()
+        -find_geometry_problem(setup) string
+    }
+    class Scene_Views["Scene views"] {
+        <<app>>
+        Scene_Builder
+        Scene_Sync
+        Tube_Display
+    }
+    class Gui_Layer {
+        <<Engine interface>>
+        +draw()
+    }
+    class Engine {
+        <<Engine>>
+        Core: get_selection_manager()
+        Camera: get_front(), get_zoom()
+    }
+    class Scene {
+        <<scene>>
+        +get_objects()
+        +set_object_position(...)
+        +set_object_material(...)
+        +find_object_hit_by_ray(...)
+    }
+    class Xray_Setup {
+        <<scene>>
+        +make_beam(), make_detector()
+        +get_detector_corners()
+    }
+    class Orbit_Camera {
+        <<scene>>
+        +orbit(...), pan(...), dolly(...)
+        +get_ray_direction(...)
+    }
+    class Xray_Display {
+        <<display functions>>
+        +find_reference_value(...)
+        +convert_to_grey(...)
+        +get_texture_corners(...)
+    }
+    class Gvxr_Adapter {
+        <<xray>>
+        +initialise(...), add_mesh(...)
+        +update_beam(...), update_detector(...)
+        +set_mesh_transform(...), set_mesh_material(...)
+        +compute_image(image)
+    }
+
+    main ..> Scene_Views : builds the nodes
+    main ..> Simulator_Gui : creates
+    Simulator_Gui ..|> Gui_Layer : realizes
+    Simulator_Gui o-- Scene : shares
+    Simulator_Gui *-- Scene_Views : owns Scene_Sync, Tube_Display
+    Simulator_Gui *-- Xray_View : owns
+    Simulator_Gui ..> Orbit_Camera : moves the view
+    Simulator_Gui ..> Engine : camera, selection
+    Xray_View *-- Xray_Setup : owns
+    Xray_View o-- Scene : reads
+    Xray_View ..> Xray_Display : grey image
+    Xray_View *-- Gvxr_Adapter : owns

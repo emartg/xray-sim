@@ -1,0 +1,94 @@
+---
+config:
+  layout: elk
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+  class:
+    useMaxWidth: false
+---
+%% Module: app (src/app). Details the block "Scene views" of architecture_overview and of app_module: the classes that keep the Engine's
+%% nodes in step with the scene (in decimetres: one unit of the Engine is 10 cm) and draw the tube, the detector, and the beam in the 3D view.
+%% The Engine's classes and those of the other modules are reference blocks with only the members that these classes use.
+classDiagram
+    direction LR
+    class Scene_Builder {
+        <<app>>
+        +VIEW_UNITS_PER_CENTIMETRE : float = 0.1$
+        +build(scene, engine)$ vector~uint32_t~
+        +to_view(values)$ vec3
+        +from_view(position)$ array~float, 3~
+    }
+    class Scene_Sync {
+        <<app>>
+        -node_ids : vector~uint32_t~
+        -applied_state : vector~Applied_State~
+        +set_node_ids(ids)
+        +update()
+        +get_selected_object() optional~size_t~
+        +get_node_id(object_index) uint32_t
+    }
+    class Tube_Display {
+        <<app>>
+        +HOUSING, PLATE, FIRST_EDGE, VOLUME$
+        -node_ids : array~uint32_t, 7~
+        -applied_style : Tube_Display_Style
+        +update(setup, is_shown, style)
+        +get_placement(setup, style, part)$ Part_Placement
+        +get_is_part_shown(style, part)$ bool
+        +get_part_colour(style, part)$ array~float, 4~
+    }
+    class Tube_Display_Style {
+        <<app>>
+        +housing, plate, edges, volume : Part
+        +are_edges_linked_to_volume : bool
+        +housing_radius, housing_length : float
+        +plate_thickness, edge_thickness : float
+        +get_edge_colour() array~float, 4~
+    }
+    class Xray_View {
+        <<app>>
+        -tube_style : Tube_Display_Style
+        +get_setup() Xray_Setup
+        +get_tube_style() Tube_Display_Style
+    }
+    class Scene {
+        <<scene>>
+        +get_objects()
+        +remove_object(index)
+    }
+    class Xray_Setup {
+        <<scene>>
+        +source_position, source_detector_distance
+        +get_direction()
+        +get_detector_position(), get_detector_size()
+        +get_detector_up(), get_detector_right()
+        +get_detector_corners()
+    }
+    class Shape_Factory {
+        <<scene>>
+        +make_cube(side)$ Shape_Data
+        +make_cylinder(radius, height, slices)$ Shape_Data
+        +make_pyramid()$ Shape_Data
+    }
+    class Engine {
+        <<Engine>>
+        Node_Manager: add_node(), get_node_by_id()
+        Selection_Manager: get/set_selected_node_id()
+        Shape_Model: set_position(), set_rotation()
+        Shape_Model: set_scale(), set_albedo(), set_is_visible()
+    }
+
+    Scene_Builder ..> Scene : reads
+    Scene_Builder ..> Engine : creates the nodes
+    Scene_Sync o-- Scene : follows, removes
+    Scene_Sync ..> Engine : updates the nodes
+    Tube_Display ..> Xray_Setup : places from
+    Tube_Display ..> Tube_Display_Style : applies
+    Tube_Display ..> Shape_Factory : shapes
+    Tube_Display ..> Engine : creates, places nodes
+    Tube_Display ..> Scene_Builder : to_view
+    Xray_View *-- Tube_Display_Style : owns

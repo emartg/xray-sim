@@ -13,7 +13,7 @@ It allows radiology professionals and students to test X-ray scanning and imagin
 - `CHANGELOG.md`: the changes of the project, version by version.
 - `docs/`: documentation (the build instructions, the credits of the third-party libraries and resources, and the diagrams, in `docs/diagrams/`, whose [README](docs/diagrams/README.md) says how they are rendered and checked).
 
-The simulator depends on the engine and on gVirtualXRay. The engine never depends on, or mentions, the simulator or gVirtualXRay.
+The simulator depends on the engine and on gVirtualXRay. The engine never depends on, or mentions, the simulator or gVirtualXRay. The [architecture overview](docs/diagrams/uml/architecture_overview.png) shows the modules of the simulator and how they use the two, and the [diagrams' index](docs/diagrams/README.md) lists the diagram of each module.
 
 ## Getting the Sources
 
