@@ -11,7 +11,7 @@ It allows radiology professionals and students to test X-ray scanning and imagin
 - `tests/`: the tests of the simulator's libraries and of its build.
 - `cmake/`: the vcpkg triplets of the MinGW presets and of the continuous integration, and the check that the submodules are at the commits that the repository records.
 - `CHANGELOG.md`: the changes of the project, version by version.
-- `docs/`: documentation (the build instructions and the credits of the third-party libraries and resources).
+- `docs/`: documentation (the build instructions, the credits of the third-party libraries and resources, and the diagrams, in `docs/diagrams/`, whose [README](docs/diagrams/README.md) says how they are rendered and checked).
 
 The simulator depends on the engine and on gVirtualXRay. The engine never depends on, or mentions, the simulator or gVirtualXRay.
 
