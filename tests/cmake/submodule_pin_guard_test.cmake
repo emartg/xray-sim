@@ -38,7 +38,8 @@ function(make_repository directory)
 	git("${directory}" ignored init --quiet)
 endfunction()
 
-# Runs the guard on a repository and checks the result: the exit code (0 or "fail"), and that the output has every given text
+# Runs the guard on a repository and checks the result: the exit code (0 or "fail"), that the output has every given text, and
+# that it has none of the texts of CASE_ABSENT
 function(check_case name source_dir expected_result)
 	execute_process(
 		COMMAND "${CMAKE_COMMAND}" -DGUARD_MODULE=${GUARD_MODULE} -DSOURCE_DIR=${source_dir} ${CASE_OPTIONS} -P "${CASE_SCRIPT}"
@@ -56,6 +57,12 @@ function(check_case name source_dir expected_result)
 		string(FIND "${output}" "${text}" position)
 		if(position EQUAL -1)
 			fail("${name}: the output does not have '${text}': ${output}")
+		endif()
+	endforeach()
+	foreach(text IN LISTS CASE_ABSENT)
+		string(FIND "${output}" "${text}" position)
+		if(NOT position EQUAL -1)
+			fail("${name}: the output has '${text}', which it should not: ${output}")
 		endif()
 	endforeach()
 	message(STATUS "${name}: ${expected_result}")
@@ -82,13 +89,16 @@ git("${super}" ignored update-index --add --cacheinfo 160000,${first_commit},eng
 set(CASE_OPTIONS "")
 check_case("at the recorded commit" "${super}" ok "is at the recorded commit")
 
-# The folder is at another commit: the guard stops, and the message names the folder, both commits, and the two ways out
+# The folder is at another commit: the guard stops, and the message names the folder, both commits, and the two ways out (detach at
+# the recorded commit, or move the pin); it no longer tells to put the folder back on a branch, since the folders stay at the pins
 git("${super}/engine" ignored checkout --quiet ${second_commit})
+set(CASE_ABSENT "switch main" "on one of its branches")
 check_case("at another commit" "${super}" stop
 	"The folder 'engine' is not at"
 	"${first_commit}" "${second_commit}"
-	"git submodule update engine" "git -C engine switch main" "is expected whenever engine/ is on one of its branches" "git add engine"
+	"git -C engine switch --detach ${first_commit}" "meant to stay at the recorded commit" "separate clone" "git add engine"
 	"-DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON")
+set(CASE_ABSENT "")
 
 # The option turns the stop into a warning that says the same
 set(CASE_OPTIONS -DXRSIM_ALLOW_UNPINNED_SUBMODULES=ON)
