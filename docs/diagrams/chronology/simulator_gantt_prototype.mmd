@@ -1,0 +1,49 @@
+---
+config:
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 14px
+  gantt:
+    useWidth: 1600
+    barHeight: 24
+    barGap: 6
+    topPadding: 60
+    sectionFontSize: 14
+---
+%% The prototype of the simulator, from 2026-11-05 (the first merge after the gap that ends the foundations) to the merge of its UML
+%% diagrams. Each bar is a group of related merges of the main branch (git log --first-parent), from the first to the last day of the
+%% group, named by the work done. Kept by hand: the other diagrams and the release v0.1.0 get their bars when they are merged.
+gantt
+    title The simulator: the prototype (5 to 24 Nov 2026)
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Build and CI
+    Troubleshooting section                      :done, 2026-11-05, 2026-11-06
+    C++23, the X-ray part with MSVC              :done, 2026-11-06, 2026-11-08
+    A time limit for the submodule checkout      :done, 2026-11-17, 2026-11-18
+    vcpkg baseline, shared GLEW, std. triplets   :done, 2026-11-21, 2026-11-23
+    Build instructions, pin guard message        :done, 2026-11-23, 2026-11-25
+
+    section gVirtualXRay
+    Its latest commits                           :done, 2026-11-06, 2026-11-07
+    The adapter on the Engine's context          :done, 2026-11-09, 2026-11-10
+    The adapter kept alive, updated in place     :done, 2026-11-09, 2026-11-10
+    Its resize test, and the resize in place     :done, 2026-11-21, 2026-11-24
+
+    section Scene and controls
+    Picking and materials                        :done, 2026-11-09, 2026-11-10
+    Moving, turning, and scaling the objects     :done, 2026-11-09, 2026-11-10
+    A free X-ray tube, finer controls            :done, 2026-11-11, 2026-11-12
+    Pixel count, the image seen from the source  :done, 2026-11-14, 2026-11-15
+
+    section 3D view
+    Orbit camera, the view in decimetres         :done, 2026-11-12, 2026-11-13
+    The tube, the detector, and the beam         :done, 2026-11-12, 2026-11-18
+
+    section Documentation
+    The diagram tool                             :done, 2026-11-24, 2026-11-25
+    The UML diagrams                             :done, 2026-11-24, 2026-11-25
