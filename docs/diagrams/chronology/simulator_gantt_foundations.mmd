@@ -1,0 +1,46 @@
+---
+config:
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 14px
+  gantt:
+    useWidth: 1600
+    barHeight: 24
+    barGap: 6
+    topPadding: 60
+    sectionFontSize: 14
+---
+%% The foundations of the simulator, from the architecture analysis (an estimate: it has no commit in this repository) to the last merge
+%% before the gap of 2026-10-29 to 2026-11-05. Each bar is a group of related merges of the main branch (git log --first-parent), from the
+%% first to the last day of the group, named by the work done. Kept by hand.
+gantt
+    title The simulator: foundations (25 Sep to 29 Oct 2026)
+    dateFormat YYYY-MM-DD
+    axisFormat %d %b
+    tickInterval 1week
+    todayMarker off
+
+    section Design
+    Architecture analysis (est.)                 :done, 2026-09-25, 2026-10-11
+
+    section Build and CI
+    One repository with the two submodules       :done, 2026-10-11, 2026-10-13
+    Build system, presets, and CI                :done, 2026-10-12, 2026-10-13
+    A vcpkg cache across runner images           :done, 2026-10-15, 2026-10-16
+    The check of the submodule pins              :done, 2026-10-20, 2026-10-21
+    A vcpkg cache that restores                  :done, 2026-10-29, 2026-10-30
+
+    section gVirtualXRay
+    The core library in the build                :done, 2026-10-14, 2026-10-15
+    Its latest commit, the cheap detector        :done, 2026-10-21, 2026-10-27
+
+    section Prototype
+    The first X-ray image in the Engine's frame  :done, 2026-10-15, 2026-10-16
+    The scene and its image beside the 3D view   :done, 2026-10-15, 2026-10-16
+    The controls of the X-ray setup              :done, 2026-10-19, 2026-10-20
+    Timers of the image                          :done, 2026-10-24, 2026-10-25
+    Wrapped texts, the times as an option        :done, 2026-10-29, 2026-10-30
+
+    section Documentation
+    README, changelog, message tags              :done, 2026-10-14, 2026-10-27

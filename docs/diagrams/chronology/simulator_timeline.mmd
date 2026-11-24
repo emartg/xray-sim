@@ -1,0 +1,32 @@
+---
+config:
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    cScale0: "#fde7c4"
+    cScale1: "#d9eaf7"
+    cScale2: "#e8f4e8"
+    cScale3: "#ede7f6"
+    cScaleLabel0: "#111111"
+    cScaleLabel1: "#111111"
+    cScaleLabel2: "#111111"
+    cScaleLabel3: "#111111"
+---
+%% The development of the simulator, from the merges of the main branch (git log --first-parent), named by the work done. September's
+%% analysis has no commit in this repository, so its date is an estimate (est.). Nothing planned has a date until it is merged.
+%% Kept by hand: each release adds its row, and the planned items move up when they are merged.
+timeline
+    title The development of the simulator
+    section September 2026
+        From 25 Sep (est.) : Architecture of the simulator, the Engine, and gVirtualXRay
+    section October 2026
+        11 to 15 Oct : One repository with the Engine and gVirtualXRay as submodules : Build system, presets, and CI : The core library of gVirtualXRay in the build : The first X-ray image, beside the scene drawn by the Engine
+        19 to 21 Oct : The controls of the X-ray setup : The check of the submodule pins
+        24 to 29 Oct : Timers of the image : A detector that is cheap to create : A vcpkg cache that restores
+    section November 2026
+        5 to 11 Nov : Troubleshooting : C++23, and the X-ray part with MSVC : The adapter on the Engine's context, kept alive : Picking, materials, moving the objects : A free X-ray tube
+        12 to 17 Nov : An orbit camera, the view in decimetres : The tube, the detector, and the beam in the 3D view : The image seen from the source
+        21 to 24 Nov : Shared GLEW and the standard triplets : The detector resized in place : Build instructions, the diagram tool : The UML diagrams
+    section Planned
+        Next : The other diagrams : Release v0.1.0 : The Engine's v0.10.0, its cleanups, release v0.2.0 : The medical features, from the owner's specification
