@@ -1,0 +1,54 @@
+---
+config:
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+    edgeLabelBackground: "#ffffff"
+---
+%% The CMake targets of the simulator and the libraries that each one links (src/CMakeLists.txt and the CMakeLists.txt of src/scene,
+%% src/display, and src/xray), with the targets of the two submodules: the Engine (its own diagram shows its libraries) and gVirtualXRay
+%% with the packages that it links in the simulator's configuration (its core library only). Every box is placed in the grid so that no
+%% arrow crosses a box; every arrow reads "links to", and the dotted one is private.
+block-beta
+    columns 9
+
+    Title["Dependencies and packages of the simulator"]:9
+
+    GLM("<b>GLM</b><br/><i>vcpkg or system</i>") space Scene("<b>XRSim_Scene</b><br/><i>Static library</i><br/>Scene, setup, camera") space Display("<b>XRSim_Display</b><br/><i>Static library</i><br/>Grey conversion") space Platform("<b>Engine::Platform</b><br/><i>Engine submodule</i><br/>also links GLFW, Dear ImGui") space Core("<b>Engine::Core</b><br/><i>Engine submodule</i><br/>also links OpenGL, GLM,<br/>Assimp, GLAD, stb_image")
+    space:9
+    space:4 XRSim("<b>XRSim</b><br/><i>Executable</i><br/>The simulator") space:4
+    space:9
+    space:4 Xray("<b>XRSim_Xray</b><br/><i>Static library</i><br/>Gvxr_Adapter") space:3 OpenGL("<b>OpenGL</b><br/><i>system library</i>")
+    space:9
+    space:2 Boost("<b>Boost</b> (headers)<br/><i>vcpkg or system</i>") space Gvxr("<b>gVirtualXRay::gVirtualXRay</b><br/><i>gVXR submodule</i><br/>Core library only") space Xraylib("<b>xraylib</b><br/><i>bundled with gVXR</i>") space:2
+    space:9
+    GLEW("<b>GLEW</b> (shared)<br/><i>vcpkg or system</i>") space Assimp("<b>Assimp</b><br/><i>vcpkg or system</i>") space TIFF("<b>LibTIFF</b><br/><i>vcpkg or system</i>") space Zlib("<b>zlib</b><br/><i>vcpkg or system</i>") space Freetype("<b>FreeType</b><br/><i>vcpkg or system</i>")
+    space:9
+    LegendTarget("Legend: target of the simulator") space:3 LegendSubmodule("Legend: target of a submodule") space:3 LegendPackage("Legend: package or library")
+
+    XRSim-- "links to" -->Scene
+    XRSim-- "links to" -->Display
+    XRSim-- "links to" -->Platform
+    XRSim-- "links to" -->Xray
+    Scene-- "links to" -->GLM
+    Platform-- "links to" -->Core
+    Xray-. "links to (private)" .->Gvxr
+    Gvxr-- "links to" -->OpenGL
+    Gvxr-- "links to" -->Boost
+    Gvxr-- "links to" -->Xraylib
+    Gvxr-- "links to" -->GLEW
+    Gvxr-- "links to" -->Assimp
+    Gvxr-- "links to" -->TIFF
+    Gvxr-- "links to" -->Zlib
+    Gvxr-- "links to" -->Freetype
+
+    classDef target fill:#d9eaf7,stroke:#1f4e79,stroke-width:2px,color:#111
+    classDef submodule fill:#ede7f6,stroke:#5e35b1,stroke-width:2px,color:#111
+    classDef library fill:#e8f4e8,stroke:#388e3c,stroke-width:2px,color:#111
+    classDef heading fill:#ffffff,stroke:#ffffff,color:#111,font-size:30px,font-weight:bold
+    class XRSim,Scene,Display,Xray,LegendTarget target
+    class Platform,Core,Gvxr,LegendSubmodule submodule
+    class GLM,OpenGL,Boost,Xraylib,GLEW,Assimp,TIFF,Zlib,Freetype,LegendPackage library
+    class Title heading

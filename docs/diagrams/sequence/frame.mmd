@@ -1,0 +1,47 @@
+---
+config:
+  fontFamily: "Segoe UI, Arial, sans-serif"
+  theme: base
+  themeVariables:
+    fontSize: 16px
+    lineColor: "#44546a"
+  sequence:
+    mirrorActors: false
+---
+%% One frame of the Engine's main loop (Core::run at the pinned v0.9.0) and where the simulator acts in it: the GUI is built first
+%% (Simulator_Gui::draw, which moves the camera, keeps the Engine's nodes in step with the scene, computes the X-ray image when something
+%% changed, and places the tube display), then the Engine processes the pick of a click, draws the scene and the GUI, and swaps the buffers.
+sequenceDiagram
+    participant Core as Engine<br/>Core
+    participant Renderer as Engine<br/>GLFW_Renderer
+    participant Gui as Simulator_Gui
+    participant View as Xray_View
+    participant Adapter as Gvxr_Adapter
+    participant Gvxr as gVirtualXRay
+    participant Tube as Tube_Display
+
+    loop each frame
+        Core->>Renderer: frame_start_config()
+        Renderer->>Renderer: poll_io_events()<br/>a click queues a pick
+        Renderer->>Gui: build_gui(): draw()
+        Gui->>Gui: update_camera()<br/>orbit, pan, dolly
+        Gui->>Gui: draw_scene_window()<br/>nodes follow the scene
+        Gui->>View: draw()
+        View->>View: update_scene()<br/>material, transform
+        View->>View: draw_setup_window()<br/>apply_setup() on a change
+        opt something changed
+            View->>Adapter: update_beam(), update_detector(), ...
+            View->>Adapter: compute_image(image)
+            Adapter->>Gvxr: computeImage()<br/>inside the OpenGL state guard
+            Gvxr-->>Adapter: energy per pixel (getFBO)
+            Adapter-->>View: Xray_Image
+            View->>View: mirror, convert_to_grey()<br/>upload the texture
+        end
+        View->>View: draw_window()<br/>the X-ray window
+        Gui->>Tube: update(setup, is_shown, style)
+        Gui->>Gui: resolve_pick_through_volume()
+        Renderer->>Renderer: process_pending_pick()<br/>selects the clicked node
+        Core->>Renderer: render_scene(): the nodes
+        Core->>Renderer: render_gui(): ImGui, X-ray texture
+        Core->>Renderer: frame_end_config(): swap
+    end
