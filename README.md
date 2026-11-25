@@ -1,7 +1,28 @@
 # Projectional Radiography Simulator
 
+[![Language](https://img.shields.io/badge/C%2B%2B-23-blue.svg)](https://isocpp.org/)
+[![OpenGL](https://img.shields.io/badge/OpenGL-4.5-red.svg)](https://www.opengl.org/)
+[![CI](https://github.com/emartg/xray-sim/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/emartg/xray-sim/actions/workflows/ci.yml)
+[![CMake](https://img.shields.io/badge/CMake-%E2%89%A53.26-brightgreen.svg)](https://cmake.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Engine](https://img.shields.io/badge/Engine-v0.9.0-informational.svg)](https://github.com/emartg/opengl-graphics-engine/releases/tag/v0.9.0)
+[![gVirtualXRay](https://img.shields.io/badge/gVirtualXRay-23591ef-informational.svg)](https://github.com/emartg/gvirtual-xray/tree/23591ef67398f750c18473aa0e65a22883992abc)
+
 Desktop application that uses a custom OpenGL graphics engine, the gVirtualXRay library and ImGui, among other tools and libraries.
 It allows radiology professionals and students to test X-ray scanning and imaging in a virtual environment.
+
+## Screenshots
+
+![The main window of the simulator](docs/images/gui/main_window.png)
+
+*The main window with the default scene: the Engine's 3D view of the objects (a water sphere, an aluminium cube, and a bone cylinder; the iron sphere is behind the setup window) with the X-ray tube and the edges of its beam, and, on the right, the X-ray image and its setup.*
+
+| X-ray image | X-ray setup |
+|---|---|
+| ![The X-ray window](docs/images/gui/xray_window.png) | ![The X-ray setup window](docs/images/gui/xray_setup_window.png) |
+| *The X-ray image of the four objects, computed by gVirtualXRay on the Engine's OpenGL context (80 keV, 256 by 128 pixels of 2 mm, logarithmic scale).* | *The setup of the beam and the detector: the energy, the free position and direction of the tube, the source-to-detector distance, the pixels, and the time of each stage of the last image.* |
+
+The captures were taken on a virtual display with software OpenGL (Mesa), so the times that they show are longer than on a graphics card.
 
 ## Repository Structure
 
@@ -11,7 +32,7 @@ It allows radiology professionals and students to test X-ray scanning and imagin
 - `tests/`: the tests of the simulator's libraries and of its build.
 - `cmake/`: the vcpkg triplets of the MinGW presets and of the continuous integration, and the check that the submodules are at the commits that the repository records.
 - `CHANGELOG.md`: the changes of the project, version by version.
-- `docs/`: documentation (the build instructions, the credits of the third-party libraries and resources, and the diagrams, in `docs/diagrams/`, whose [README](docs/diagrams/README.md) says how they are rendered and checked).
+- `docs/`: documentation (the build instructions, the credits of the third-party libraries and resources, the captures of the program, in `docs/images/`, and the diagrams, in `docs/diagrams/`, whose [README](docs/diagrams/README.md) says how they are rendered and checked).
 
 The simulator depends on the engine and on gVirtualXRay. The engine never depends on, or mentions, the simulator or gVirtualXRay. The [architecture overview](docs/diagrams/uml/architecture_overview.png) shows the modules of the simulator and how they use the two, and the [diagrams' index](docs/diagrams/README.md) lists the diagram of each module.
 
