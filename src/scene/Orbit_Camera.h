@@ -13,6 +13,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 struct Orbit_Camera
 {
@@ -26,6 +27,15 @@ struct Orbit_Camera
 	static constexpr float DOLLY_FACTOR_PER_NOTCH{ 0.85f }; // the distance to the pivot is multiplied by it for each notch of the wheel
 	static constexpr float MIN_PITCH{ -89.0f }, MAX_PITCH{ 89.0f };      // in degrees
 	static constexpr float MIN_DISTANCE{ 2.0f }, MAX_DISTANCE{ 600.0f }; // from the camera to the pivot along the view, in centimetres
+	// the limit of each coordinate of the two points of look_at, in centimetres, and the least distance between them
+	static constexpr float MAX_COORDINATE{ 1000.0f }, MIN_LOOK_DISTANCE{ 0.001f };
+
+	// Public Static Methods
+	// ---------------------
+	// Returns the camera at a position that looks at a target (both in centimetres), or nothing if the view cannot be one of the camera:
+	// a coordinate that is not a number or is beyond MAX_COORDINATE, a position at the target, or a view so close to the vertical that
+	// its pitch is beyond its limits
+	static std::optional<Orbit_Camera> look_at(const std::array<float, 3>& position, const std::array<float, 3>& target);
 
 	// Public Methods
 	// --------------

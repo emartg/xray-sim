@@ -10,10 +10,12 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include <glm/glm.hpp>
 
+#include "scene/Orbit_Camera.h"
 #include "scene/Scene.h"
 
 class Core;
@@ -37,8 +39,8 @@ public:
 	// Converts a position of the Engine's view to centimetres of the scene
 	static std::array<float, 3> from_view(const glm::vec3& position);
 
-	// Creates the camera (looking at the objects from the front and above), a directional light, and a node for each
-	// object of the scene, and adds them to the Engine. The Engine has to be initialised. Returns the id of the node of each object, in
-	// the order of the objects of the scene (the camera and the light have ids too, and are not in the list)
-	static std::vector<std::uint32_t> build(const Scene& scene, Core* engine);
+	// Creates the camera (at the start view, or else looking at the objects from the front and above), a directional light, and a node
+	// for each object of the scene, and adds them to the Engine. The Engine has to be initialised. Returns the id of the node of each
+	// object, in the order of the objects of the scene (the camera and the light have ids too, and are not in the list)
+	static std::vector<std::uint32_t> build(const Scene& scene, Core* engine, const std::optional<Orbit_Camera>& start_view = std::nullopt);
 };

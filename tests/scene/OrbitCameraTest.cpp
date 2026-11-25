@@ -2,13 +2,15 @@
  * OrbitCameraTest.cpp
  * This file is the test of the Orbit_Camera struct. It checks the vectors of the view (as the Engine's camera computes them), the orbit
  * about a pivot (the direction that the mouse turns the scene, the distance and the place of the pivot in the view that it keeps, and
- * the limits of the pitch), the pan (a point at the depth of the pivot follows the mouse), and the dolly (the factor of each notch and
- * the limits of the distance). It returns an error code if a check fails.
+ * the limits of the pitch), the pan (a point at the depth of the pivot follows the mouse), the dolly (the factor of each notch and
+ * the limits of the distance), and the camera that looks from a position at a target. It returns an error code if a check fails.
  */
 
 #include <array>
 #include <cmath>
 #include <iostream>
+#include <limits>
+#include <optional>
 #include <string>
 
 #include "scene/Orbit_Camera.h"
@@ -208,6 +210,39 @@ namespace
 		camera.dolly({ 0.0f, 0.0f, 50.0f }, -1.0f);
 		check(camera.position[2] > 40.0f, "and goes back");
 	}
+
+	// Checks look_at: the angles of a view from a position at a target, and the views that the camera cannot take
+	void test_look_at()
+	{
+		const std::optional<Orbit_Camera> front = Orbit_Camera::look_at({ 0.0f, 0.0f, 40.0f }, { 0.0f, 0.0f, 0.0f });
+		check(front && is_near(front->yaw, -90.0, 1e-3) && is_near(front->pitch, 0.0, 1e-3), "a view along -z has a yaw of -90 degrees");
+		check(front && is_near(front->position, { 0.0f, 0.0f, 40.0f }), "the camera is at the position");
+
+		// an oblique view: the direction of the camera is the one from the position to the target
+		const std::array<float, 3>        position{ -120.0f, 60.0f, 95.0f };
+		const std::array<float, 3>        target{ 25.0f, 5.0f, -20.0f };
+		const std::optional<Orbit_Camera> oblique = Orbit_Camera::look_at(position, target);
+		const double                      length  = distance(position, target);
+		check(
+			oblique &&
+				is_near(
+					oblique->get_front(),
+					{ static_cast<float>((target[0] - position[0]) / length),
+					  static_cast<float>((target[1] - position[1]) / length),
+					  static_cast<float>((target[2] - position[2]) / length) }),
+			"the camera looks at the target");
+		check(oblique && is_near(oblique->get_depth_of(target), length, 1e-3), "the target is at the centre of the view");
+
+		const float not_a_number = std::numeric_limits<float>::quiet_NaN();
+		const float infinity     = std::numeric_limits<float>::infinity();
+		check(!Orbit_Camera::look_at({ 1.0f, 2.0f, 3.0f }, { 1.0f, 2.0f, 3.0f }), "a position at the target is refused");
+		check(!Orbit_Camera::look_at({ 0.0f, 40.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }), "a view straight down is refused");
+		check(!Orbit_Camera::look_at({ 0.0f, -40.0f, 0.1f }, { 0.0f, 0.0f, 0.0f }), "a view too close to straight up is refused");
+		check(!Orbit_Camera::look_at({ not_a_number, 0.0f, 40.0f }, { 0.0f, 0.0f, 0.0f }), "a position that is not a number is refused");
+		check(!Orbit_Camera::look_at({ 0.0f, 0.0f, 40.0f }, { 0.0f, infinity, 0.0f }), "an infinite target is refused");
+		check(!Orbit_Camera::look_at({ 0.0f, 0.0f, 1000.5f }, { 0.0f, 0.0f, 0.0f }), "a coordinate beyond the limit is refused");
+		check(Orbit_Camera::look_at({ 0.0f, 0.0f, 1000.0f }, { 0.0f, 0.0f, 0.0f }).has_value(), "a coordinate at the limit is accepted");
+	}
 } // namespace
 
 int main()
@@ -216,6 +251,7 @@ int main()
 	test_orbit();
 	test_pan();
 	test_dolly();
+	test_look_at();
 
 	if (failures > 0)
 	{
