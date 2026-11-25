@@ -11,11 +11,11 @@ config:
     topPadding: 60
     sectionFontSize: 14
 ---
-%% The prototype of the simulator, from 2026-11-05 (the first merge after the gap that ends the foundations) to the merge of its UML
-%% diagrams. Each bar is a group of related merges of the main branch (git log --first-parent), from the first to the last day of the
-%% group, named by the work done. Kept by hand: the other diagrams and the release v0.1.0 get their bars when they are merged.
+%% The prototype of the simulator, from 2026-11-05 (the first merge after the gap that ends the foundations) to the merge of the command
+%% line option that sets the start view. Each bar is a group of related merges of the main branch (git log --first-parent), from the first to the last day of the
+%% group, named by the work done. Kept by hand: the release v0.1.0 gets its bar when it is merged.
 gantt
-    title The simulator: the prototype (5 to 24 Nov 2026)
+    title The simulator: the prototype (5 to 25 Nov 2026)
     dateFormat YYYY-MM-DD
     axisFormat %d %b
     tickInterval 1week
@@ -43,7 +43,10 @@ gantt
     section 3D view
     Orbit camera, the view in decimetres         :done, 2026-11-12, 2026-11-13
     The tube, the detector, and the beam         :done, 2026-11-12, 2026-11-18
+    A start view from the command line           :done, 2026-11-25, 2026-11-26
 
     section Documentation
     The diagram tool                             :done, 2026-11-24, 2026-11-25
     The UML diagrams                             :done, 2026-11-24, 2026-11-25
+    Frame, data, dependency diagrams, charts     :done, 2026-11-24, 2026-11-25
+    README badges and captures                   :done, 2026-11-25, 2026-11-26

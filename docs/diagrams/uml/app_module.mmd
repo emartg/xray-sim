@@ -19,6 +19,7 @@ classDiagram
         <<app functions>>
         +main(argc, argv) int
         +parse_command_line(...) bool
+        +parse_view(...) optional~Orbit_Camera~
     }
     class Simulator_Gui {
         <<app>>
@@ -78,6 +79,7 @@ classDiagram
     }
     class Orbit_Camera {
         <<scene>>
+        +look_at(position, target)$
         +orbit(...), pan(...), dolly(...)
         +get_ray_direction(...)
     }
@@ -97,6 +99,7 @@ classDiagram
 
     main ..> Scene_Views : builds the nodes
     main ..> Simulator_Gui : creates
+    main ..> Orbit_Camera : start view
     Simulator_Gui ..|> Gui_Layer : realizes
     Simulator_Gui o-- Scene : shares
     Simulator_Gui *-- Scene_Views : owns Scene_Sync, Tube_Display
