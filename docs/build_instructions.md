@@ -4,7 +4,7 @@ This document explains how to build and run the simulator (`XRSim`). The simulat
 subdirectory, so the details of the prerequisites, the dependencies of the engine, and the troubleshooting of
 the platforms are in the [engine's build instructions](../engine/docs/build_instructions.md); this document
 only covers what is specific to this repository. The simulator also builds the core library of the
-gVirtualXRay fork (the X-ray part, option `XRSIM_BUILD_XRAY`, on by default with every compiler: GCC, Clang, MinGW, and MSVC). On
+gVXR submodule, the copy of gVirtualXRay (the X-ray part, option `XRSIM_BUILD_XRAY`, on by default with every compiler: GCC, Clang, MinGW, and MSVC). On
 Linux its dependencies are the system packages, and on Windows they are built by vcpkg, like the engine's.
 
 ## Prerequisites
@@ -134,7 +134,7 @@ ctest --test-dir out/build/vs2026-msvc-debug -C Debug --output-on-failure --no-t
 
 ## Code Formatting
 
-The code of `src/` is formatted with clang-format 23.1.1, using the `.clang-format` of the repository. The submodules are excluded (`.clang-format-ignore`). To check the formatting:
+The code of `src/` and `tests/` is formatted with clang-format 23.1.1, using the `.clang-format` of the repository. The submodules are excluded (`.clang-format-ignore`). To check the formatting:
 
 ```
 git ls-files '*.c' '*.cpp' '*.h' '*.hpp' | xargs clang-format --style=file --dry-run --Werror
@@ -147,7 +147,7 @@ The workflow `.github/workflows/ci.yml` runs on every push to `main` and on ever
 - **Format:** the clang-format check above.
 - **Submodules:** every build job checks out the Engine and gVirtualXRay at the recorded commits; that step stops after 10 minutes, so a clone that hangs on the network fails the job soon, and "Re-run failed jobs" runs it again.
 - **Linux:** the `ninja-gcc-debug` and `ninja-clang-release` presets, with the system packages; it builds and runs the tests under a virtual display (Xvfb) with Mesa's software OpenGL 4.5 renderer.
-- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache, with the triplets `x64-windows-ci` and `x64-mingw-dynamic-ci` of `cmake/vcpkg_triplets`, which leave the compiler out of the ABI hash of the packages so that a new build of the compiler in the runner image does not discard the cache; `x64-windows-ci` is also the host triplet, so it does the same for the tools that vcpkg builds for itself; a compiler upgrade does not rebuild a package in the CI, because the key of the cache has the versions of the compiler, of CMake, and of PowerShell (the hash of every package has them); the summary of each job shows how many packages vcpkg restored and the entries of the hash of `zlib` and `vcpkg-cmake`: if the cache does not restore, the entry that differs between two runs is the cause); it builds and runs only the tests that need no display (the invalid argument test, the unit tests of the scene, the setup, the display, and the pin guard, and the adapter test, because the X-ray part is built in every job), since the runners do not support OpenGL 4.5.
+- **Windows:** the `ninja-msvc-debug` and `mingw-gcc-vcpkg-release` presets, with the dependencies built by vcpkg (stored in a binary cache, with the triplets `x64-windows-ci` and `x64-mingw-dynamic-ci` of `cmake/vcpkg_triplets`, which leave the compiler out of the ABI hash of the packages so that a new build of the compiler in the runner image does not discard the cache; `x64-windows-ci` is also the host triplet, so it does the same for the tools that vcpkg builds for itself; a compiler upgrade does not rebuild a package in the CI, because the key of the cache has the versions of the compiler, of CMake, and of PowerShell (the hash of every package has them); the summary of each job shows how many packages vcpkg restored and the entries of the hash of `zlib` and `vcpkg-cmake`: if the cache does not restore, the entry that differs between two runs is the cause); it builds and runs only the tests that need no display (the invalid argument test, the unit tests of the scene, the setup, the camera, the display, and the pin guard, and the adapter test, because the X-ray part is built in every job), since the runners do not support OpenGL 4.5.
 
 ## Troubleshooting
 

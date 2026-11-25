@@ -18,7 +18,7 @@ classDiagram
     class Scene_Builder {
         <<app>>
         +VIEW_UNITS_PER_CENTIMETRE : float = 0.1$
-        +build(scene, engine)$ vector~uint32_t~
+        +build(scene, engine, start_view)$ vector~uint32_t~
         +to_view(values)$ vec3
         +from_view(position)$ array~float, 3~
     }
@@ -74,6 +74,11 @@ classDiagram
         +make_cylinder(radius, height, slices)$ Shape_Data
         +make_pyramid()$ Shape_Data
     }
+    class Orbit_Camera {
+        <<scene>>
+        +position : array~float, 3~
+        +yaw, pitch : float
+    }
     class Engine {
         <<Engine>>
         Node_Manager: add_node(), get_node_by_id()
@@ -83,6 +88,7 @@ classDiagram
     }
 
     Scene_Builder ..> Scene : reads
+    Scene_Builder ..> Orbit_Camera : start view
     Scene_Builder ..> Engine : creates the nodes
     Scene_Sync o-- Scene : follows, removes
     Scene_Sync ..> Engine : updates the nodes
