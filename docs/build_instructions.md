@@ -94,7 +94,7 @@ cmake --build --preset ninja-gcc-debug
 ./out/build/ninja-gcc-debug/bin/XRSim
 ```
 
-The build presets build every target (the application, the libraries, and the tests when they are on). `XRSim --frames N` renders `N` frames and exits (it is used by the automated tests). The executable is at `bin/` in the build directory (`bin/Debug/` or `bin/Release/` with the Visual Studio generators).
+The build presets build every target (the application, the libraries, and the tests when they are on). `XRSim --frames N` renders `N` frames and exits (it is used by the automated tests). `XRSim --view X Y Z TX TY TZ` places the camera of the 3D view at the start, at `X Y Z` looking at `TX TY TZ`, in centimetres (each coordinate within 1000 cm, and the view no closer than 1 degree to the vertical); the mouse moves it from there as usual. For example, `XRSim --view -130 66 103 51 3 12` shows the whole default X-ray setup (the tube, the beam, the objects, and the detector) to the left of the X-ray windows. The executable is at `bin/` in the build directory (`bin/Debug/` or `bin/Release/` with the Visual Studio generators).
 
 ## Tests
 

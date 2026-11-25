@@ -23,13 +23,15 @@
 
 // Public Static Methods
 // ---------------------
-std::vector<std::uint32_t> Scene_Builder::build(const Scene& scene, Core* engine)
+std::vector<std::uint32_t> Scene_Builder::build(const Scene& scene, Core* engine, const std::optional<Orbit_Camera>& start_view)
 {
 	auto& node_manager  = engine->get_node_manager();
 	auto& scene_manager = engine->get_scene_manager();
 
-	// the camera: 40 cm in front of the objects, 12 cm above them, looking slightly down (the default yaw looks along -z)
-	auto camera = std::make_shared<Camera>("Camera", to_view({ 0.0f, 12.0f, 40.0f }), glm::vec3{ 0.0f, 1.0f, 0.0f }, -90.0f, -15.0f);
+	// the camera: at the start view if there is one, and by default 40 cm in front of the objects, 12 cm above them, looking slightly
+	// down (the default yaw looks along -z)
+	const Orbit_Camera view = start_view.value_or(Orbit_Camera{ { 0.0f, 12.0f, 40.0f }, -90.0f, -15.0f });
+	auto camera = std::make_shared<Camera>("Camera", to_view(view.position), glm::vec3{ 0.0f, 1.0f, 0.0f }, view.yaw, view.pitch);
 	camera->set_name(String_Utils::generate_id_prefixed_name(camera));
 	scene_manager->set_camera(camera);
 	node_manager->add_node(std::move(camera));

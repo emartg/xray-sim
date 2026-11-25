@@ -27,6 +27,31 @@ namespace
 	const glm::vec3 WORLD_UP{ 0.0f, 1.0f, 0.0f };
 } // namespace
 
+// Public Static Methods
+// ---------------------
+std::optional<Orbit_Camera> Orbit_Camera::look_at(const std::array<float, 3>& position, const std::array<float, 3>& target)
+{
+	for (const std::array<float, 3>& point : { position, target })
+		for (const float coordinate : point)
+			if (!(std::abs(coordinate) <= MAX_COORDINATE)) // also false for a value that is not a number
+				return std::nullopt;
+
+	const glm::vec3 offset = to_vec3(target) - to_vec3(position);
+	const float     length = glm::length(offset);
+	if (length < MIN_LOOK_DISTANCE)
+		return std::nullopt;
+
+	// the inverse of get_front: the pitch from the height of the direction, and the yaw from its direction on the plane y = 0
+	const glm::vec3 direction = offset / length;
+	Orbit_Camera    camera;
+	camera.position = position;
+	camera.yaw      = glm::degrees(std::atan2(direction.z, direction.x));
+	camera.pitch    = glm::degrees(std::asin(std::clamp(direction.y, -1.0f, 1.0f)));
+	if (camera.pitch < MIN_PITCH || camera.pitch > MAX_PITCH)
+		return std::nullopt;
+	return camera;
+}
+
 // Public Methods
 // --------------
 std::array<float, 3> Orbit_Camera::get_front() const
